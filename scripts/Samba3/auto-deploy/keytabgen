@@ -1,0 +1,10 @@
+#!/bin/bash
+HOSTNAME="proxy"
+DOMINIO="hlg.rimed.cu"
+SERVICE="host"
+
+kinit kadmin/admin 
+
+kadmin -l add --random-key --max-ticket-life=unlimited --max-renewable-life=unlimited --expiration-time=never --pw-expiration-time=never --attributes= $SERVICE/$HOSTNAME.$DOMINIO
+kadmin -l add --random-key --max-ticket-life=unlimited --max-renewable-life=unlimited --expiration-time=never --pw-expiration-time=never --attributes= $SERVICE/$HOSTNAME
+ 

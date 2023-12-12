@@ -1,0 +1,5 @@
+manager
+ctl+ati
+
+manager
+friends

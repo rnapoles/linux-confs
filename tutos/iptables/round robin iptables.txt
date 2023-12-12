@@ -1,0 +1,15 @@
+iptables -A PREROUTING -t nat -p tcp --dport 3128 \
+         -m statistic --mode nth --every 3 --packet 0 \
+         -j DNAT --to-destination 192.168.24.11:3128
+
+iptables -A PREROUTING -t nat -p tcp --dport 3128 \
+         -m statistic --mode nth --every 2 --packet 0 \
+         -j DNAT --to-destination 192.168.24.12:3128
+
+iptables -A PREROUTING -t nat -p tcp --dport 3128 \
+         -j DNAT --to-destination 192.168.24.13:3128
+         
+#iptables -t nat -A POSTROUTING  -p tcp -s ${proxyProv} --sport 3128 -j SNAT --to ${lan1}
+iptables -t nat -A POSTROUTING  -p tcp -s 192.168.24.11 --sport 3128 -j SNAT --to ${lan1}
+iptables -t nat -A POSTROUTING  -p tcp -s 192.168.24.12 --sport 3128 -j SNAT --to ${lan1}
+iptables -t nat -A POSTROUTING  -p tcp -s 192.168.24.13 --sport 3128 -j SNAT --to ${lan1}

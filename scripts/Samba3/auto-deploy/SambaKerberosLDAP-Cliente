@@ -1,0 +1,332 @@
+#!/bin/bash
+# Start
+
+set -e
+
+# Caso o usuario nao seja root, ira aparecer essa mensagem;
+if [ $UID != 0 ]; then {
+        echo "Este script deve de ser ejecutado como superusuario, root o sudo";
+        exit 1;
+        }
+fi
+
+echo " 
+
+deb http://mirror.hlg.uci.cu/debian/ lenny main contrib non-free  
+deb http://mirror.hlg.uci.cu/debian-security/ lenny/updates main 
+deb http://100.0.0.5:3142/www.backports.org/debian lenny-backports main contrib non-free
+
+" > /etc/apt/sources.list
+
+
+# Faz o apt-get update;
+apt-get update || { echo "Fallo al atualizar"; exit 1; }
+
+#########################################################
+# Informacoes do servidor Samba/LDAP/Kerberos;          
+# Hostname do servidor SambaPDC/Kerberos;               
+SERVERHOSTNAME="uciserver-1"                                
+# Dominio DNS;                                          
+DOMINIO="hlg.uci.cu"                               
+# IP do Servidor DNS;                                   
+IPDNS="100.0.0.1"                                    
+# Placa de rede do cliente;                             
+PLACADEREDE="eth0"                                      
+# Dominio Samba PDC;                                    
+WORKGROUPSAMBA="HLG"                               
+# IP do Samba PDC;                                      
+IPPDC="100.0.0.1"                                    
+# DC do servidor LDAP;                                  
+LDAPDC="dc=hlg,dc=uci,dc=cu"                       
+# Rede do cliente Samba                                 
+REDESAMBA="100.0.0.0/16"                              
+#########################################################
+
+DEBIAN_FRONTEND=noninteractive
+export DEBIAN_FRONTEND=noninteractive
+
+# Instala os pacotes necessarios;
+apt-get install -y --force-yes -t lenny-backports dialog heimdal-clients krb5-config libnss-ldap libsasl2-modules-gssapi-heimdal ldap-utils libpam-krb5 libpam-ldap smbclient samba samba-common smbfs libsmbclient lsb-base lsb-base libpam-smbpass libpam-cracklib fping winbind || { echo "Impossivel continuar, erro no nome dos pacotes"; exit 1;}
+
+
+unset DEBIAN_PRIORITY
+unset DEBIAN_FRONTEND
+
+
+
+#echo 'Mostra o dominio em DC para o LDAP;'
+LDAPDC=`echo dc=$DOMINIO|sed "s/\./,dc=/g"`
+
+#echo M'ostra o dominio em maiusculo;'
+DOMINIOKRB=`echo $DOMINIO|tr '[:lower:]' '[:upper:]'`
+
+#echo ' Mostra somente o hostname do cliente;'
+HOSTNAMECLIENT=`hostname`
+
+#echo ' Remove o dns-search e o dns-nameservers do /etc/network/interfaces, para ficar somente no /etc/resolv.conf;'
+NAMESERVEROLD=`cat /etc/network/interfaces|grep dns-nameservers|cut -d " " -f2|tail -1`
+DNSSEARCHOLD=`cat /etc/network/interfaces|grep dns-search|cut -d " " -f2|tail -1`
+NAMESERVEROLD2=`cat /etc/network/interfaces|sed "s/dns-nameservers $NAMESERVEROLD//g" > /etc/network/interfaces.new1`
+DNSSEARCHOLD2=`cat /etc/network/interfaces.new1|sed "s/dns-search $DNSSEARCHOLD//g" > /etc/network/interfaces.new2`
+cat /etc/network/interfaces.new2 > /etc/network/interfaces
+rm /etc/network/interfaces.new1
+rm /etc/network/interfaces.new2
+
+echo  'Configurando resolv para el dominio;'
+echo "search $DOMINIO
+nameserver $IPDNS
+" > /etc/resolv.conf
+
+echo 'Configurando Cliente ldap;'
+echo "base $LDAPDC
+uri ldaps://$SERVERHOSTNAME.$DOMINIO/
+port 636
+
+ldap_version 3
+bind_policy soft
+bind_timelimit 2
+timelimit 2
+scope sub
+nss_reconnect_maxsleeptime 8
+nss_reconnect_sleeptime 1
+nss_initgroups_ignoreusers root
+nss_srv_domain $DOMINIO
+
+pam_password exop
+
+pam_filter objectclass=posixAccount
+pam_login_attribute uid
+pam_member_attribute memberUid
+
+nss_base_passwd ou=Usuarios,$LDAPDC?sub
+nss_base_shadow ou=Usuarios,$LDAPDC?sub
+nss_base_passwd ou=Equipos,$LDAPDC?one
+nss_base_shadow ou=Equipos,$LDAPDC?one
+nss_base_group  ou=Grupos,$LDAPDC?one
+
+
+ssl on
+#tls_ciphers TLSv1
+" > /etc/libnss-ldap.conf
+
+echo "host $SERVERHOSTNAME.$DOMINIO
+base $LDAPDC
+uri ldaps://$SERVERHOSTNAME.$DOMINIO/
+port 636
+#TLS_REQCERT allow
+TLS_REQCERT never
+" > /etc/ldap/ldap.conf
+
+echo 'Configurando Nsswitch;'
+echo "passwd:    files ldap [notfound=continue]
+shadow:    files ldap [notfound=continue]
+group:     files ldap [notfound=continue]
+
+hosts:          files dns
+networks:       files
+
+protocols:      db files
+services:       db files
+ethers:         db files
+rpc:            db files
+
+netgroup:       nis
+" > /etc/nsswitch.conf
+
+echo 'Configurando Cliente Kerberos;'
+echo "[libdefaults]
+        default_realm = $DOMINIOKRB
+        ticket_lifetime = 80000
+        kdc_timesync = 1
+        ccache_type = 4
+        forwardable = true
+        proxiable = true
+        v4_instance_resolve = false
+        v4_name_convert = {
+                host = {
+                        rcmd = host
+                        ftp = ftp
+                }
+                plain = {
+                        something = something-else
+                }
+        }
+
+[realms]
+$DOMINIOKRB = {
+        kdc = $SERVERHOSTNAME.$DOMINIO
+        admin_server = $SERVERHOSTNAME.$DOMINIO
+}
+
+" > /etc/krb5.conf
+
+echo  'Configurando PAM;'
+echo "auth            required        pam_env.so
+auth            required        pam_group.so use_first_pass
+auth            sufficient      pam_unix.so likeauth nullok
+auth            sufficient      pam_krb5.so use_first_pass
+auth            sufficient      pam_winbind.so use_first_pass
+auth            required        pam_deny.so
+" > /etc/pam.d/common-auth
+
+echo "account         required        pam_unix.so broken_shadow
+account         sufficient      pam_succeed_if.so uid < 100 quiet
+account         [default=bad user_unknown=ignore success=ok authinfo_unavail=ignore] pam_krb5.so
+account         [default=bad user_unknown=ignore success=ok authinfo_unavail=ignore] pam_winbind.so
+account         required        pam_permit.so
+" > /etc/pam.d/common-account
+
+echo "password        requisite       pam_cracklib.so retry=2
+password        sufficient      pam_unix.so use_authtok md5 shadow
+password        sufficient      pam_winbind.so use_authtok
+password        required        pam_deny.so
+" > /etc/pam.d/common-password
+
+echo "session         required        pam_limits.so
+session         required        pam_unix.so
+session         optional        pam_mkhomedir.so skel=etc/skel/ umask=077
+session         required        pam_krb5.so use_first_pass
+session         required        pam_winbind.so use_first_pass
+" > /etc/pam.d/common-session
+
+echo 'Eliminando  archivos de la cache de samba;'
+rm -rf /etc/samba/*tdb
+rm -rf /var/lib/samba/*tdb
+rm -rf /var/lib/samba/*dat
+rm -rf /var/log/samba/*
+
+echo 'Configurando Samba;'
+echo "[global]
+        workgroup = $WORKGROUPSAMBA
+        netbios name = $HOSTNAMECLIENT
+        realm = $DOMINIOKRB
+        security = domain
+        wins server = $IPPDC
+#	use kerberos keytab = yes
+	client use spnego = yes
+	client NTLMv2 auth = yes
+	kerberos method = system keytab
+
+	bind interfaces only = yes
+	interfaces = $PLACADEREDE, lo
+	hosts allow = $REDESAMBA, 127.0.0.1
+	
+	debug level = 2
+	log file = /var/log/samba/%m.log
+	max log size = 50
+	log level = 1
+	syslog = 0	                                
+	utmp = Yes
+
+#        idmap uid = 10000-15000
+#        idmap gid = 10000-15000
+	 idmap uid = 100000-200000
+	 idmap gid = 100000-200000 
+
+#        template primary group = "\"Domain Users"\"
+        template shell = /bin/bash
+        template homedir = /home/%U
+#        winbind separator = +
+        winbind enum users = yes
+        winbind enum groups = yes
+        winbind use default domain = yes
+                                                                                
+	encrypt passwords = yes
+        invalid users = root
+	socket options = TCP_NODELAY IPTOS_LOWDELAY SO_RCVBUF=8192 SO_SNDBUF=8192
+        local master = no
+	domain master = no
+	dns proxy = no
+              
+	preserve case = yes
+	short preserve case = no
+	default case = lower
+        case sensitive = no
+        
+        dos charset = cp850
+        unix charset = iso8859-1
+        display charset = LOCALE
+        restrict anonymous = 0
+
+        load printers = no
+        printing = bsd
+        printcap name = /dev/null
+        disable spoolss = yes
+
+
+                              
+[publico]
+
+        path = /samba/publico
+        writable = yes
+        browseable = no
+#        share modes = no
+        admin users = @\"Domain Admins\"
+
+" > /etc/samba/smb.conf
+/etc/init.d/samba stop
+/etc/init.d/winbind stop
+/etc/init.d/samba start
+/etc/init.d/winbind start
+
+echo "
+create  cifs.spnego     *       *               /usr/sbin/cifs.upcall %k %d
+
+" >> /etc/request-key.conf
+
+
+clear
+
+echo 'Pone la maquina en el dominio kerberos/pdc;'
+echo "Pass del usuario addmachine"
+kinit addmachine/admin
+if [ `kadmin list host/$HOSTNAMECLIENT.$DOMINIO` 2>/dev/null = host/$HOSTNAMECLIENT.$DOMINIO -o `kadmin list cifs/$HOSTNAMECLIENT.$DOMINIO` 2>/dev/null = cifs/$HOSTNAMECLIENT.$DOMINIO -o `kadmin list host/$HOSTNAMECLIENT` 2>/dev/null = host/$HOSTNAMECLIENT -o `kadmin list cifs/$HOSTNAMECLIENT` 2>/dev/null = cifs/$HOSTNAMECLIENT ] ; then
+  dialog --yesno 'Esta maquina ya esta en el dominio, desea volver a registrarla?' 5 58 ; echo $?
+     if [ $? = 0 ]; then
+        echo "Pass del usuario addmachine"
+        net rpc join member -U addmachine
+        rm -rf /etc/krb5.keytab
+        kadmin del host/$HOSTNAMECLIENT.$DOMINIO
+        kadmin del host/$HOSTNAMECLIENT
+	kadmin del cifs/$HOSTNAMECLIENT.$DOMINIO
+	kadmin del cifs/$HOSTNAMECLIENT
+        kadmin add --random-key --max-ticket-life=unlimited --max-renewable-life=unlimited --expiration-time=never --pw-expiration-time=never --attributes= host/$HOSTNAMECLIENT.$DOMINIO
+	kadmin add --random-key --max-ticket-life=unlimited --max-renewable-life=unlimited --expiration-time=never --pw-expiration-time=never --attributes= host/$HOSTNAMECLIENT
+        kadmin add --random-key --max-ticket-life=unlimited --max-renewable-life=unlimited --expiration-time=never --pw-expiration-time=never --attributes= cifs/$HOSTNAMECLIENT.$DOMINIO
+	kadmin add --random-key --max-ticket-life=unlimited --max-renewable-life=unlimited --expiration-time=never --pw-expiration-time=never --attributes= cifs/$HOSTNAMECLIENT
+        ktutil -k /etc/krb5.keytab get host/$HOSTNAMECLIENT.$DOMINIO
+	ktutil -k /etc/krb5.keytab get host/$HOSTNAMECLIENT
+        ktutil -k /etc/krb5.keytab get cifs/$HOSTNAMECLIENT.$DOMINIO
+	ktutil -k /etc/krb5.keytab get cifs/$HOSTNAMECLIENT
+        kdestroy
+        /etc/init.d/samba restart
+        /etc/init.d/winbind restart
+        mkdir -p /samba/publico
+     fi	       	
+   else
+   	echo "Pass del usuario addmachine"
+   	net rpc join member -U addmachine
+     	rm -rf /etc/krb5.keytab
+     	kadmin add --random-key --max-ticket-life=unlimited --max-renewable-life=unlimited --expiration-time=never --pw-expiration-time=never --attributes= host/$HOSTNAMECLIENT.$DOMINIO
+	kadmin add --random-key --max-ticket-life=unlimited --max-renewable-life=unlimited --expiration-time=never --pw-expiration-time=never --attributes= host/$HOSTNAMECLIENT
+	kadmin add --random-key --max-ticket-life=unlimited --max-renewable-life=unlimited --expiration-time=never --pw-expiration-time=never --attributes= cifs/$HOSTNAMECLIENT.$DOMINIO
+	kadmin add --random-key --max-ticket-life=unlimited --max-renewable-life=unlimited --expiration-time=never --pw-expiration-time=never --attributes= cifs/$HOSTNAMECLIENT
+	ktutil -k /etc/krb5.keytab get host/$HOSTNAMECLIENT.$DOMINIO
+	ktutil -k /etc/krb5.keytab get host/$HOSTNAMECLIENT
+	ktutil -k /etc/krb5.keytab get cifs/$HOSTNAMECLIENT.$DOMINIO
+	ktutil -k /etc/krb5.keytab get cifs/$HOSTNAMECLIENT
+	kdestroy
+	/etc/init.d/samba restart
+	/etc/init.d/winbind restart
+	mkdir -p /samba/publico
+	
+fi
+
+chgrp "Domain Admins" /samba/publico
+
+getent passwd
+kinit addmachine/admin
+smbclient //$SERVERHOSTNAME/netlogon -k
+ldapwhoami -Y GSSAPI
+klist
+

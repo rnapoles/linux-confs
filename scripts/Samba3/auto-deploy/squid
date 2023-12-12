@@ -1,0 +1,25 @@
+#!/bin/bash
+HOSTNAME="proxy"
+DOMINIO="hlg.desoft.cu"
+
+SERVICE="host"
+
+kinit kadmin/admin 
+
+kadmin -l add --random-key --policy=default --max-ticket-life=unlimited --max-renewable-life=unlimited --expiration-time=never --pw-expiration-time=never --attributes= $SERVICE/$HOSTNAME.$DOMINIO
+kadmin -l add --random-key --policy=default --max-ticket-life=unlimited --max-renewable-life=unlimited --expiration-time=never --pw-expiration-time=never --attributes= $SERVICE/$HOSTNAME
+
+ktutil -k /etc/squid/HTTP.keytab get  $SERVICE/$HOSTNAME.$DOMINIO
+ktutil -k /etc/squid/HTTP.keytab get  $SERVICE/$HOSTNAME
+
+SERVICE="HTTP"
+
+kadmin -l add --random-key --policy=default --max-ticket-life=unlimited --max-renewable-life=unlimited --expiration-time=never --pw-expiration-time=never --attributes= $SERVICE/$HOSTNAME.$DOMINIO
+kadmin -l add --random-key --policy=default --max-ticket-life=unlimited --max-renewable-life=unlimited --expiration-time=never --pw-expiration-time=never --attributes= $SERVICE/$HOSTNAME
+
+ktutil -k /etc/squid/HTTP.keytab get  $SERVICE/$HOSTNAME.$DOMINIO
+ktutil -k /etc/squid/HTTP.keytab get  $SERVICE/$HOSTNAME
+
+chown proxy.proxy /etc/squid/HTTP.keytab
+
+

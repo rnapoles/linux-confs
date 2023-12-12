@@ -1,0 +1,113 @@
+attributetype ( 1.3.6.1.4.1.10018.1.1.1 NAME 'userPasswkey'
+        DESC 'Estado del servicio [ on | off ]'
+        EQUALITY caseExactIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{64} SINGLE-VALUE )
+
+attributetype ( 1.3.6.1.4.1.10018.1.1.2 NAME 'NumeroCarnet'
+        DESC 'Carnet del Usuario'
+        EQUALITY caseExactIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{64} SINGLE-VALUE )
+
+attributetype ( 1.3.6.1.4.1.10018.1.1.3 NAME 'ServProxyAccess'
+        DESC 'Acceso del servicio'
+        EQUALITY caseExactIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{64} SINGLE-VALUE )
+
+attributetype ( 1.3.6.1.4.1.10018.1.1.4 NAME 'ServProxyIp'
+        DESC 'IP del usuario'
+        EQUALITY caseExactIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{64} SINGLE-VALUE )
+
+attributetype ( 1.3.6.1.4.1.10018.1.1.5 NAME 'ServProxyMac'
+        DESC 'Mac del usuario'
+        EQUALITY caseExactIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{64} SINGLE-VALUE )
+
+attributetype ( 1.3.6.1.4.1.10018.1.1.6 NAME 'ServProxyQuota'
+        DESC 'Cuota de Navegacion'
+        EQUALITY caseExactIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{64} SINGLE-VALUE )
+
+attributetype ( 1.3.6.1.4.1.10018.1.1.7 NAME 'ServMailIn'
+        DESC 'Acceso del servicio'
+        EQUALITY caseExactIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{64} SINGLE-VALUE )
+
+attributetype ( 1.3.6.1.4.1.10018.1.1.8 NAME 'ServMailOut'
+        DESC 'Acceso del servicio'
+        EQUALITY caseExactIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{64} SINGLE-VALUE )
+
+attributetype ( 1.3.6.1.4.1.10018.1.1.9 NAME 'ServMailList'
+        DESC 'Listas a las que pertenecera el usuario'
+        EQUALITY caseExactIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{254} )
+
+attributetype ( 1.3.6.1.4.1.10018.1.1.10 NAME 'ServMailQuota'
+        DESC 'Cuota de Correo'
+        EQUALITY caseExactIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{64} SINGLE-VALUE )
+
+attributetype ( 1.3.6.1.4.1.10018.1.1.11 NAME 'ServXmmpAccess'
+        DESC 'Acceso del servicio'
+        EQUALITY caseExactIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{64} SINGLE-VALUE )
+
+attributetype ( 1.3.6.1.4.1.10018.1.1.12 NAME 'ServSmbQuota'
+        DESC 'Cuota del Servidor De Archivos'
+        EQUALITY caseExactIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{64} SINGLE-VALUE )
+
+attributetype ( 1.3.6.1.4.1.10018.1.1.13 NAME 'ServFtpQuota'
+        DESC 'Cuota del Ftp'
+        EQUALITY caseExactIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{64} SINGLE-VALUE )
+
+attributetype ( 1.3.6.1.4.1.10018.1.1.14 NAME 'Sexo'
+        DESC 'Sexo [M | F]'
+        EQUALITY caseExactIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{64} SINGLE-VALUE )
+
+attributetype ( 1.3.6.1.4.1.10018.1.1.15 NAME 'Area'
+        DESC 'Faculta a la que pertenece el Usuario'
+        EQUALITY caseExactIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{64} SINGLE-VALUE )
+
+attributetype ( 1.3.6.1.4.1.10018.1.1.16 NAME 'CategDoc'
+        DESC 'Categoria Docente'
+        EQUALITY caseExactIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{64} SINGLE-VALUE )
+
+attributetype ( 1.3.6.1.4.1.10018.1.1.17  NAME 'CategCient'
+        DESC 'Categoria Cientifica'
+        EQUALITY caseExactIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{64} SINGLE-VALUE )
+
+attributetype ( 1.3.6.1.4.1.10018.1.1.18  NAME 'Administrador'
+        DESC 'Creador de la Cuenta'
+        EQUALITY caseExactIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{64} SINGLE-VALUE )
+
+attributetype ( 1.3.6.1.4.1.10018.1.1.19 NAME 'Cuadro'
+        DESC 'Cuadros ISPHLG [on | off]'
+        EQUALITY caseExactIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{64} SINGLE-VALUE )
+
+attributetype ( 1.3.6.1.4.1.10018.1.1.20 NAME 'Militante'
+        DESC 'Militante [ No | UJC | PCC ]'
+        EQUALITY caseExactIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{64} SINGLE-VALUE )
+
+attributetype ( 1.3.6.1.4.1.10018.1.1.21 NAME 'Expiracion'
+        DESC 'Fecha de Expiracion de La Cuenta'
+        EQUALITY caseExactIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{64} SINGLE-VALUE )
+
+objectclass ( 1.3.6.1.4.1.10018.1.2.1 NAME 'ServicesAccount' SUP top AUXILIARY
+	DESC 'Servicios de Usuario  '
+	MUST ( mail $ homeDirectory )
+        MAY ( uidNumber $ gidNumber $ uid $ cn $ loginShell $ userPassword $ userPasswkey $ NumeroCarnet
+        $ ServProxyAccess $ ServProxyIp $ ServProxyMac $ ServProxyQuota $ ServMailIn $ ServMailOut
+        $ ServMailList $ ServMailQuota $ ServXmmpAccess $ ServSmbQuota $ ServFtpQuota $ Sexo $ Area
+        $ CategDoc $ CategCient $ Administrador $ Cuadro $ Militante $ Expiracion
+	 ) )

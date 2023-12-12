@@ -1,0 +1,48 @@
+
+server {
+  listen 80;
+  server_name apps.example.com;
+  rewrite ^(.*) https://$host$1 permanent;
+}
+
+
+server {
+  listen 80;
+  server_name apps;
+  rewrite ^(.*) https://apps.example.com$1 permanent;
+}
+
+
+server {
+   listen              443;
+   server_name         apps.example.com;
+
+    access_log  /var/log/nginx/apps.log;
+    error_log  /var/log/nginx/apps-err.log;
+
+    ssl on;
+    ssl_certificate  /etc/nginx/ssl/apps-servercrt.pem;
+    ssl_certificate_key /etc/nginx/ssl/apps-serverkey.pem;
+
+    ssl_session_timeout 5m;
+
+    ssl_protocols SSLv3 TLSv1;
+    ssl_ciphers ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv3:+EXP;
+    ssl_prefer_server_ciphers on;
+
+  location / {
+    proxy_pass http://192.168.0.14:8069/; # aqui el ip o el dns del sitio real (tambien se puede pedir por https:// al sitio real)
+    #proxy_set_header Host apps.example.com; # aqui el nombre de host que pasa en las cabezeras al server real
+    error_page 500 502 503 504 /50x.html;
+  }
+
+  location = /50x.html {
+    root /var/www/nginx-default;
+  }
+
+
+}
+
+
+
+

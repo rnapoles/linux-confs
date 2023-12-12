@@ -1,0 +1,23 @@
+net -S PDC -U rnapoles rpc rights grant "hlg\Join Machine" SeMachineAccountPrivilege
+net -S localhost  rpc rights grant "hlg\Join Machine" SeMachineAccountPrivilege
+net rpc rights grant "hlg\Join Machine" SeMachineAccountPrivilege
+net rpc group list
+net groupmap list --sin pass
+
+
+//listar privilgios disp
+net rpc rights list
+Password:
+     SeMachineAccountPrivilege  Add machines to domain
+      SeTakeOwnershipPrivilege  Take ownership of files or other objects
+             SeBackupPrivilege  Back up files and directories
+            SeRestorePrivilege  Restore files and directories
+     SeRemoteShutdownPrivilege  Force shutdown from a remote system
+      SePrintOperatorPrivilege  Manage printers
+           SeAddUsersPrivilege  Add users and groups to the domain
+       SeDiskOperatorPrivilege  Manage disk shares
+//mostrar priv asignados
+net rpc rights list accounts
+
+http://www.samba.org/samba/docs/man/Samba-HOWTO-Collection/NetCommand.html
+http://www.samba.org/samba/docs/man/Samba-HOWTO-Collection/rights.html

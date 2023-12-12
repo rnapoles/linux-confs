@@ -1,0 +1,1710 @@
+#!/bin/bash
+#
+# Para Debian Etch 4.0
+# 
+# Configurador/Instalador do LDAP Kerberizado + Samba Kerberizado  
+# 
+# Por Eduardo Sachs (edu.sachs@terra.com.br)
+#
+# Agradecimentos: Diego (Prodesan), William Merllto (Prognus), Andrew Barlett (Samba Team), 
+#		  Andre Avilo da Costa (Elaborate)
+#
+# Testado com: OpenLDAP 2.3.30-5
+#              Samba 3.0.24-6etch4
+#	       SmbLDAP-Tools 0.9.2-3
+#              Heimdal Kerberos 0.7.2.dfsg.1-10
+#	       Cyrus SASL 2.1.22.dfsg1-8
+#	       BIND 9.3.4-2
+# 
+# Obs.: Voce DEVE usar o smbldap-useradd e o smbldap-passwd para adicionar usuarios ao dominio PDC/Kerberos.
+#	O usuario root nao esta conseguindo entrar no home dele pelo samba, mas, ele se loga no Kerberos e no Samba.
+#
+# Update: Qui Jun 21 00:11:27 BRT 2007
+#
+#			Adaptado para Debian Lenny y Squeeze por
+#			Reinier Napoles Martinez
+#			rnapoles@hlg.uci.cu
+#
+
+set -e
+
+# Caso o usuario nao seja root, ira aparecer essa mensagem;
+if [ $UID != 0 ]; then {
+  echo "Este script debe ejecutarse como superusuario, root o sudo";
+  exit 1;
+}
+fi
+
+
+#echo 'Acquire::Languages "none";' > /etc/apt/apt.conf.d/99no-translation
+#echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/81mintupdate-debian
+
+echo '
+
+Acquire {
+    Languages "none";
+};
+
+
+' > /etc/apt/apt.conf
+
+echo '
+
+deb ftp://192.168.0.8/Debian/debian/ wheezy  main contrib non-free
+deb ftp://192.168.0.8/Debian/debian/ wheezy-updates main contrib non-free
+
+' > /etc/apt/sources.list
+
+
+# Faz o apt-get update;
+apt-get -o Acquire::Check-Valid-Until=false update || { echo "No se ha podido actualizar el apt-get"; exit 1; }
+rm -f /etc/apt/apt.conf.d/99no-translation
+
+logf='/root/SSO-install.log'
+echo 'actualizando apt' > $logf
+
+
+# Faz o download do dialog;
+apt-get install -y dialog debconf-utils || { echo "imposible continuar,error en los paquetes"; exit 1;}
+
+# Perguntas para realizar las configuracines;
+
+#Generar pass
+PASS=$(< /dev/urandom tr -dc _A-Z-a-z-0-9 | head -c10)
+
+DOMINIO="hlg.desoft.cu"
+PLACADEREDE="eth0"
+LDAPPASS="$PASS"
+KADMINPASS="$PASS"
+ROOTPASS="$PASS"
+ADDMACHINEPASS="$PASS"
+ADMINISTRATORPASS="$PASS"
+WORKGROUPSAMBA="HLG"
+PASSCERT="$PASS"
+PAIS="CU"
+ESTADO="Holguin"
+CIDADE="Holguin"
+EMAIL="admins@$DOMINIO"
+EMPRESA="HLG"
+SETOR="MIO"
+
+MIRROR="repos.hlg.desoft.cu"
+MIRRORIP="192.168.0.8"
+
+#pass para hacer pruebas con kinit
+echo $PASS > /tmp/kinit-passtest 
+
+
+
+## Mudamos o debconf para critical, para que n?o sejam feitas perguntas desnecess?rias.
+#debconf-set-selections debconf/debconf.critical
+
+DEBIAN_FRONTEND=noninteractive
+export DEBIAN_FRONTEND=noninteractive
+
+
+# Remove alguns pacotes;
+#apt-get remove -y dhcp3-client dhcp3-common
+#Debian 7
+apt-get remove -y isc-dhcp-client isc-dhcp-common
+
+echo 'Eliminando dhcp3-client' >> $logf
+
+# Instala os pacotes necessarios;
+# Obs.: tiramos o heimdal-dev porque estava conflitando com o libkrb5-dev, e o Squid Kerberizado necessita do libkrb5-dev.
+
+apt-get -o Acquire::Check-Valid-Until=false update 
+
+#debian6 
+#libkrb5-25-heimdal
+#
+#
+
+#debian6 
+#libkrb5-26-heimdal
+#
+#
+
+#deshabilitar ipv6
+#en debian 7 no existe /etc/modprobe.d/aliases.conf
+#sed -i 's/#\ alias\ net-pf-10\ ipv6/alias\ net-pf-10\ off\nalias\ ipv6\ off/' /etc/modprobe.d/aliases.conf
+#echo "net.ipv6.conf.all.disable_ipv6 = 1" >> /etc/sysctl.conf
+
+echo 'Deshabilitando ipv6' >> $logf
+
+#grep "net.ipv6.conf.all.disable_ipv6"  /etc/sysctl.conf
+
+
+out=`grep "net.ipv6.conf.all.disable_ipv6"  /etc/sysctl.conf | wc -l`
+
+if [ $out == "0" ]; then {
+	
+	echo "# Disable IPv6"
+	echo "# Disable IPv6" >> /etc/sysctl.conf
+	echo "net.ipv6.conf.all.disable_ipv6 = 1" >> /etc/sysctl.conf
+	echo "#" >> /etc/sysctl.conf
+	sysctl -p;
+
+        }
+fi
+
+
+#smbfs no existe, en debian 7 es cifs-utils
+#libgssapi2-heimdal = libgssapi3-heimdal
+
+
+apt-get install -y --allow-unauthenticated bind9 openssl ssl-cert libsasl2-2 libsasl2-modules sasl2-bin libsasl2-modules-gssapi-heimdal \
+libnss-ldap slapd ldap-utils libpam-krb5 heimdal-kdc heimdal-clients libkrb5-dev heimdal-docs \
+heimdal-servers libkadm5clnt7-heimdal libkadm5srv8-heimdal libhdb9-heimdal libgssapi3-heimdal \
+libkrb5-26-heimdal libasn1-8-heimdal krb5-config heimdal-kcm smbclient samba samba-common samba-doc cifs-utils \
+libsmbclient smbldap-tools slapd-smbk5pwd keyutils gzip ntp ipcalc dnsutils
+
+echo 'Instalando paquetes' >> $logf
+
+
+echo "Alterando Debconf"
+echo 'Modificando Defconf' >> $logf
+
+#debconf-set-selections debconf/debconf.high
+
+unset DEBIAN_PRIORITY
+unset DEBIAN_FRONTEND
+
+# Mostra somente o IP da placa desejada;
+
+echo "get ip conf"
+echo "Obteniendo configuracion de red" > $logf
+IP=`ifconfig $PLACADEREDE|grep "inet"|cut -d : -f2|sed -n '1p'|sed "s/Bcast//g"|sed "s/ //g"`
+
+# Generando IP ao contrario para a configuración do named;
+IPREV0=`ifconfig $PLACADEREDE|grep "inet"|cut -d : -f2|sed -n '1p'|sed "s/Bcast//g"|sed "s/ //g"|cut -d . -f4`
+IPREV1=`ifconfig $PLACADEREDE|grep "inet"|cut -d : -f2|sed -n '1p'|sed "s/Bcast//g"|sed "s/ //g"|cut -d . -f3`
+IPREV2=`ifconfig $PLACADEREDE|grep "inet"|cut -d : -f2|sed -n '1p'|sed "s/Bcast//g"|sed "s/ //g"|cut -d . -f2`
+IPREV3=`ifconfig $PLACADEREDE|grep "inet"|cut -d : -f2|sed -n '1p'|sed "s/Bcast//g"|sed "s/ //g"|cut -d . -f1`
+IPREV=`echo $IPREV1.$IPREV2.$IPREV3`
+REDESAMBA=`echo $IPREV3.$IPREV2.$IPREV1.`
+
+echo "Obteniendo hostname"
+echo 'Obteniendo hostname' >> $logf
+# Mostra somente o hostname do servidor;
+HOSTNAME=`hostname`
+
+echo "Obteniendo diretorio actual"
+echo "Obteniendo diretorio actual" >> $logf
+# Mostra diretorio que vc esta;
+PWD_DEFAULT=`pwd`
+PWD_SRC_INSTALL=$PWD_DEFAULT
+
+echo "Obteniendo dominio"
+echo 'Obteniendo dominio' >> $logf
+
+echo "Mostra el dominio en mayuscula;"
+DOMINIOKRB=`echo $DOMINIO|tr '[:lower:]' '[:upper:]'`
+
+echo "Muestra el WORKGROUP de samba em mayuscula;"
+
+WORKGROUP=`echo $WORKGROUPSAMBA|tr '[:lower:]' '[:upper:]'`
+
+echo "Muestra el dominio del DC para el LDAP;"
+LDAPDC=`echo dc=$DOMINIO|sed "s/\./,dc=/g"`
+
+echo  "Genera el password del rootdn en MD5 para ldapmaster/admin"
+LDAPPASS2=`slappasswd -v -s $LDAPPASS -h {MD5}`
+
+echo  "Genera el password del rootdn en MD5 para adminstrator"
+ADMINISTRATORPASS2=`slappasswd -v -s $ADMINISTRATORPASS -h {MD5}`
+
+
+echo  "Muestra el dominio para o LDIF;"
+DOMINIOLDIF=`echo $DOMINIO|cut -d . -f-1`
+
+echo  "Mostrar somente o Nombre do dominio, sem o .com ou .com.br;"
+DOMINIOCERT=`echo $DOMINIO|cut -d . -f1`
+
+echo  "Remove o dns-search e o dns-nameservers do /etc/network/interfaces, para ficar somente no /etc/resolv.conf;"
+
+NAMESERVEROLD=`cat /etc/network/interfaces|grep dns-nameservers|cut -d " " -f2| tail -1`
+
+echo "get dnssearch"
+DNSSEARCHOLD=`cat /etc/network/interfaces|grep dns-search|cut -d " " -f2| tail -1`
+
+echo "get nameserver"
+
+NAMESERVEROLD2=`cat /etc/network/interfaces|sed "s/dns-nameservers $NAMESERVEROLD//g" > /etc/network/interfaces.new1`
+DNSSEARCHOLD2=`cat /etc/network/interfaces.new1|sed "s/dns-search $DNSSEARCHOLD//g" > /etc/network/interfaces.new2`
+cat /etc/network/interfaces.new2 > /etc/network/interfaces
+rm /etc/network/interfaces.new1
+rm /etc/network/interfaces.new2
+
+echo "Generar reporte de algunas configuracines;"
+echo "
+Información del servidor:
+-------------------
+Hostname del servidor: $HOSTNAME
+FQDN (Fully Qualified Domain Name): $HOSTNAME.$DOMINIO
+Dominio DNS: $DOMINIO
+Dominio LDAP: $LDAPDC
+Dominio PDC: $WORKGROUP
+Dominio Kerberos: $DOMINIOKRB
+NetBIOS del PDC: $HOSTNAME
+tarjeta de red interna: $PLACADEREDE
+IP de $PLACADEREDE: $IP
+Password de ldapmaster/admin: $LDAPPASS
+Password de kadmin/admin: $KADMINPASS
+Password de root / base LDAP: $ROOTPASS
+Password de addmachine / base LDAP: $ADDMACHINEPASS
+Password de certificado SSL: $PASSCERT
+-------------------
+" > /root/KerberosLDAP-Infos
+chmod 600 /root/KerberosLDAP-Infos
+
+
+
+
+echo "Diretorios de configuración;"
+ETC=/etc
+ETC_BIND=/etc/bind
+ETC_LDAP=/etc/ldap
+ETC_DEFAULT=/etc/default
+ETC_SAMBA=/etc/samba
+ETC_SMBTOOLS=/etc/smbldap-tools
+ETC_NETWORK=/etc/network
+BACKUP=/root/backup-kerberosldap
+
+
+echo "Backup de los archivos de configuración;"
+echo "Backup de los archivos de configuración;" >> $logf
+
+mkdir -p $BACKUP
+mkdir -p $BACKUP/$ETC
+mkdir -p $BACKUP/$ETC_LDAP
+mkdir -p $BACKUP/$ETC_DEFAULT
+mkdir -p $BACKUP/$ETC_SAMBA
+mkdir -p $BACKUP/$ETC_NETWORK
+cp -Rap $ETC/hosts $BACKUP/$ETC
+cp -Rap $ETC/ntp.conf $BACKUP/$ETC
+cp -Rap $ETC/resolv.conf $BACKUP/$ETC
+cp -Rap $ETC/libnss-ldap.conf $BACKUP/$ETC
+cp -Rap $ETC/inetd.conf $BACKUP/$ETC
+cp -Rap $ETC/nsswitch.conf $BACKUP/$ETC
+cp -Rap $ETC/krb5.conf $BACKUP/$ETC
+cp -Rap $ETC/request-key.conf $BACKUP/$ETC
+cp -Rap $ETC_NETWORK/interfaces $BACKUP/$ETC_NETWORK
+cp -Rap $ETC_SAMBA/smb.conf $BACKUP/$ETC_SAMBA
+cp -Rap $ETC_BIND $BACKUP/$ETC
+cp -Rap $ETC_LDAP $BACKUP/$ETC
+cp -Rap $ETC_DEFAULT/slapd $BACKUP/$ETC_DEFAULT
+cp -Rap $ETC_DEFAULT/saslauthd $BACKUP/$ETC_DEFAULT 
+cp -Rap /usr/sbin/smbldap-useradd $BACKUP/
+cp -Rap /usr/sbin/smbldap-passwd $BACKUP/
+
+#sed -i -e 's/Digest::SHA1/Digest::SHA/g' /usr/sbin/smbldap-passwd
+
+echo "Para algunos servicios;"
+echo "Para algunos servicios;"  >> $logf
+/etc/init.d/samba stop
+/etc/init.d/slapd stop
+/etc/init.d/saslauthd stop
+/etc/init.d/heimdal-kcm stop
+/etc/init.d/heimdal-kdc stop
+/etc/init.d/bind9 stop
+/etc/init.d/ntp stop
+
+#mover fichero ldap 2.4
+if [ -e /etc/ldap/slapd.d ] ; then
+	mv -f /etc/ldap/slapd.d /etc/ldap/slapd.d.old
+fi
+
+
+
+echo "driftfile /var/lib/ntp/ntp.drift
+statsdir /var/log/ntpstats/
+statistics loopstats peerstats clockstats
+filegen loopstats file loopstats type day enable
+filegen peerstats file peerstats type day enable
+filegen clockstats file clockstats type day enable
+#server 0.debian.pool.ntp.org iburst dynamic
+#server 1.debian.pool.ntp.org iburst dynamic
+#server 2.debian.pool.ntp.org iburst dynamic
+#server 3.debian.pool.ntp.org iburst dynamic
+server 127.127.1.0
+fudge 127.127.1.0 stratum 13
+restrict -4 default kod notrap nomodify nopeer noquery
+restrict -6 default kod notrap nomodify nopeer noquery
+restrict 127.0.0.1 nomodify
+#broadcast 192.168.0.255
+
+" > $ETC/ntp.conf
+
+
+/etc/init.d/ntp start
+
+###################################
+#				  
+#Inicio de la configuración de BIND9
+#				  
+###################################
+
+echo "Generando el fichero named.conf;"
+echo "Generando el fichero named.conf;" >> $logf
+echo "include "\"/etc/bind/named.conf.options"\";
+
+logging {
+        category default { log_syslog; };
+        channel log_syslog { syslog; };
+};
+                
+zone "\"."\" {
+        type hint;
+        file "\"/etc/bind/db.root"\";
+};
+
+zone "\"localhost"\" {
+        type master;
+        file "\"/etc/bind/db.local"\";
+};
+                
+zone "\"127.in-addr.arpa"\" {
+        type master;
+        file "\"/etc/bind/db.127"\";
+};
+
+zone "\"0.in-addr.arpa"\" {
+        type master;
+        file "\"/etc/bind/db.0"\";
+};
+               
+zone "\"255.in-addr.arpa"\" {
+        type master;
+        file "\"/etc/bind/db.255"\";
+};
+                               
+zone "\"$DOMINIO"\" in {
+        file "\"/etc/bind/$DOMINIO"\";
+        type master;
+};
+                                               
+zone "\"$IPREV.in-addr.arpa"\" in {
+        file "\"/etc/bind/$IPREV.in-addr.arpa.zone"\";
+	type master;
+};
+
+include "\"/etc/bind/named.conf.local"\";
+" > $ETC_BIND/named.conf
+
+
+echo "Generando configuración para el $DOMINIO;"
+echo "Generando configuración para el $DOMINIO;"  >> $logf
+echo "$"TTL" 2d
+@               IN SOA          $HOSTNAME.$DOMINIO.     root.$HOSTNAME.$DOMINIO. (
+                                `date +%Y%m%d`01      ; serial
+                                3h              ; refresh
+                                1h              ; retry
+                                1w              ; expiry
+                                1d )            ; minimum
+
+$DOMINIO.       IN NS           ns.$DOMINIO.
+
+$"ORIGIN" $DOMINIO.
+$DOMINIO.	IN		A	$IP
+$HOSTNAME	IN		A	$IP
+
+ns			IN		A	$IP
+kerberos        IN CNAME $HOSTNAME.$DOMINIO.
+ldap            IN CNAME $HOSTNAME.$DOMINIO.
+_msdcs     	IN CNAME $HOSTNAME.$DOMINIO.
+
+#mirror     	IN CNAME Server-4
+
+
+; The Kerberos realm
+_kerberos             	 				IN TXT	        "\"$DOMINIOKRB"\"
+_kerberos.it          	 				IN TXT          "\"$DOMINIOKRB"\"
+_kerberos.srv         	 				IN TXT          "\"$DOMINIOKRB"\"
+_kerberos._tcp           				IN SRV 10 1 88  $HOSTNAME.$DOMINIO.
+_kerberos._udp           				IN SRV 10 1 88  $HOSTNAME.$DOMINIO.
+_kerberos-adm._tcp     					IN SRV 10 1 749 $HOSTNAME.$DOMINIO.
+_kpasswd._udp            				IN SRV 10 1 464 $HOSTNAME.$DOMINIO.
+_ldap._tcp               				IN SRV 10 1 389 $HOSTNAME.$DOMINIO.
+
+
+_ldap_dc                                                IN TXT           \"$LDAPDC\"
+_samba_pdc_domain                                       IN TXT           \"$WORKGROUP\"
+_samba_pdc_ip_address                                   IN TXT           \"$IP\"
+
+" > $ETC_BIND/$DOMINIO
+
+echo "Generando zona inversa;"
+echo "$"TTL" 2d
+@               IN SOA          $HOSTNAME.$DOMINIO.     root.$HOSTNAME.$DOMINIO. (
+                                `date +%Y%m%d`01      ; serial
+                                3h              ; refresh
+                                1h              ; retry
+                                1w              ; expiry
+                                1d )            ; minimum
+
+@            IN       NS       ns.$DOMINIO.
+
+$IPREV0      IN       PTR      $HOSTNAME.$DOMINIO.
+" > $ETC_BIND/$IPREV.in-addr.arpa.zone
+
+echo "Configurando el fichero resolv.conf para el nuevo dominio;"
+echo "Configurando el fichero resolv.conf para el nuevo dominio;"  >> $logf
+echo "search $DOMINIO
+nameserver $IP
+
+#search	hlg.rimed.cu
+#nameserver 152.123.1.3
+
+" > $ETC/resolv.conf
+
+echo "Configurando el archivo /etc/hosts"
+echo "Configurando el archivo /etc/hosts" >> $logf
+
+echo "$IP $HOSTNAME.$DOMINIO $HOSTNAME" >> $ETC/hosts-temp
+echo "127.0.0.1 localhost.localdomain localhost" >> $ETC/hosts-temp
+echo "$MIRRORIP $MIRROR" >> $ETC/hosts-temp
+cat $ETC/hosts-temp > $ETC/hosts
+rm -f $ETC/hosts-temp
+
+echo "Reiniciano bind;" >> $logf
+echo "Reiniciano bind;"
+/etc/init.d/bind9 restart
+
+##################################
+#				 #
+# Inicio de la configuración de LDAP #
+#				 #
+##################################
+
+echo "configuración del certificado digital de LDAP;" 
+echo "configuración del certificado digital de LDAP;" >> $logf
+# configuración do certificado digital do LDAP;
+rm -rf $ETC_LDAP/ssl
+mkdir -p $ETC_LDAP/ssl
+cd $ETC_LDAP/ssl
+mkdir certs
+mkdir private
+chmod 700 private
+echo '01' > serial
+touch index.txt
+
+echo "[ ca ]
+default_ca  = local_ca
+
+[ local_ca  ]
+dir = $ETC_LDAP/ssl
+certificate = $ETC_LDAP/ssl/cacert.pem
+database = $ETC_LDAP/ssl/index.txt
+new_certs_dir = $ETC_LDAP/ssl/certs
+private_key = $ETC_LDAP/ssl/private/cakey.pem
+serial = $ETC_LDAP/ssl/serial
+default_crl_days = 3650
+default_days = 3650
+default_md = md5
+default_bits = 1024
+encrypt_key = yes
+policy = local_ca_policy
+x509_extensions = local_ca_extensions
+unique_subject = no
+
+[ local_ca_policy ]
+commonName = supplied
+stateOrProvinceName = supplied
+countryName = supplied
+emailAddress = supplied
+organizationName = supplied
+organizationalUnitName = supplied
+
+[ local_ca_extensions ]
+subjectAltName = DNS:$HOSTNAME.$DOMINIO
+basicConstraints = CA:false
+nsCertType = server
+
+[ req ]
+default_bits = 2048
+default_keyfile = $ETC_LDAP/ssl/private/cakey.pem
+default_md = md5
+prompt = no
+distinguished_name = $DOMINIOCERT
+x509_extensions = x509_cert
+
+[ $DOMINIOCERT ]
+countryName = $PAIS
+stateOrProvinceName = $ESTADO
+localityName = $CIDADE
+emailAddress = $EMAIL
+organizationName = $EMPRESA
+organizationalUnitName = $SETOR
+commonName = $HOSTNAME.$DOMINIO
+
+[ x509_cert ]
+nsCertType = server
+basicConstraints = CA:true
+" > $ETC_LDAP/ssl/CA.conf
+
+echo "[ req ]
+prompt = no
+distinguished_name = $DOMINIOCERT
+
+[ $DOMINIOCERT ]
+countryName = $PAIS
+stateOrProvinceName = $ESTADO
+localityName = $CIDADE
+emailAddress = $EMAIL
+organizationName = $EMPRESA
+organizationalUnitName  = $SETOR
+commonName = $HOSTNAME.$DOMINIO
+" > $ETC_LDAP/ssl/LocalServer.conf
+
+export OPENSSL_CONF=$ETC_LDAP/ssl/CA.conf
+openssl req -x509 -newkey rsa:1024 -out cacert.pem -outform PEM -days 3650 -passout pass:$PASSCERT
+export OPENSSL_CONF=$ETC_LDAP/ssl/LocalServer.conf
+openssl req -newkey rsa:1024 -keyout tempkey.pem -keyform PEM -out tempreq.pem -outform PEM -passout pass:$PASSCERT
+openssl rsa < tempkey.pem > serverkey.pem -passin pass:$PASSCERT
+chmod 400 serverkey.pem
+export OPENSSL_CONF=$ETC_LDAP/ssl/CA.conf
+openssl ca -in tempreq.pem -out servercrt.pem -passin pass:$PASSCERT << EOF
+y
+y
+EOF
+rm -rf tempkey.pem tempreq.pem certs index.txt.attr LocalServer.conf  serial CA.conf index.txt index.txt.old private serial.old
+
+echo "Generando slapd.conf;"
+echo "Generando slapd.conf;" >> $logf
+
+echo "
+# Allow LDAPv2 binds
+allow bind_v2 
+
+# This is the main slapd configuration file. See slapd.conf(5) for more
+# info on the configuration options.
+
+#######################################################################
+# Global Directives:
+sizelimit 20
+timelimit -1
+threads 8
+
+# Schema and objectClass definitions
+include         /etc/ldap/schema/core.schema
+include         /etc/ldap/schema/cosine.schema
+include         /etc/ldap/schema/nis.schema
+include         /etc/ldap/schema/inetorgperson.schema
+include         /etc/ldap/schema/samba.schema
+include         /etc/ldap/schema/hdb.schema
+include         /etc/ldap/schema/services.schema
+
+TLSCertificateFile      /etc/ldap/ssl/servercrt.pem
+TLSCertificateKeyFile   /etc/ldap/ssl/serverkey.pem
+TLSCACertificateFile    /etc/ldap/ssl/cacert.pem
+
+sasl-host $HOSTNAME.$DOMINIO
+sasl-realm $DOMINIOKRB
+
+# Mapping of SASL authentication identities to LDAP entries
+authz-regexp
+  uid=(.+),cn=(.+),cn=.+,cn=auth
+  ldap:///$LDAPDC??sub?(|(uid=$1)(cn=$1@$2))
+
+authz-regexp
+  uidnumber=0\\\+gidnumber=0,cn=peercred,cn=external,cn=auth
+  krb5PrincipalName=ldapmaster/admin@$DOMINIOKRB,ou=KerberosPrincipals,$LDAPDC
+
+authz-regexp
+  gidNumber=0\\\+uidNumber=0,cn=peercred,cn=external,cn=auth
+  krb5PrincipalName=ldapmaster/admin@$DOMINIOKRB,ou=KerberosPrincipals,$LDAPDC
+
+authz-regexp
+  uid=(.+),cn=.+,cn=auth
+  ldap:///$LDAPDC??sub?(|(uid=$1)(krb5PrincipalName=$1@$DOMINIOKRB))
+
+sasl-secprops minssf=0  
+
+sasl-secprops  noanonymous 
+security ssf=0
+
+pidfile         /var/run/slapd/slapd.pid
+argsfile        /var/run/slapd/slapd.args
+
+loglevel        0
+
+modulepath      /usr/lib/ldap
+moduleload      back_bdb
+moduleload      unique
+moduleload      auditlog
+#moduleload      smbk5pwd
+
+idletimeout     30
+backend         bdb
+database        bdb
+suffix          "$LDAPDC"
+rootdn          "krb5PrincipalName=ldapmaster/admin@$DOMINIOKRB,ou=KerberosPrincipals,$LDAPDC"
+rootpw          $LDAPPASS2
+directory       "/var/lib/ldap"
+
+dbconfig set_cachesize 0 2097152 0 
+dbconfig set_lk_max_objects 1500 
+dbconfig set_lk_max_locks 1500  
+dbconfig set_lk_max_lockers 1500
+ 
+# Indices to maintain
+#index mail,mailAlternateAddress,objectClass,deliveryMode,accountStatus,phpgwAccountType,phpgwAccountStatus,ou pres,eq
+index mail,objectClass,ou pres,eq
+index cn                    pres,sub,eq
+index sn                    pres,sub,eq
+index uid                   pres,sub,eq
+index displayName           pres,sub,eq
+index uidNumber             eq
+index gidNumber             eq
+index memberUID             eq
+index sambaSID              eq
+index sambaPrimaryGroupSID  eq
+index sambaDomainName       eq
+index givenName             pres,sub,eq
+index default               sub
+index krb5PrincipalName,krb5PrincipalRealm      eq,pres
+
+# Password Hash Definition
+password-hash {MD5}
+ 
+# Overlay Unique
+# Atributos unicos na base
+overlay unique
+unique_uri ldap:///$LDAPDC?uidNumber,uid,krb5PrincipalName?sub
+unique_uri ldap:///ou=Usuarios,$LDAPDC?mail,homeDirectory?sub
+unique_uri ldap:///ou=Grupos,$LDAPDC?gidNumber,cn?sub
+
+# Overlay Auditlog
+overlay auditlog
+auditlog /var/log/ldapchanges.log
+
+# Overlay smbk5pwd
+#overlay smbk5pwd
+
+# Save the time that the entry gets modified, for database #
+lastmod         on
+
+include /etc/ldap/slapd.access
+" > $ETC_LDAP/slapd.conf
+
+echo "# Autorizacao para o heimdal poder acessar a base de dados do ldap
+authz-regexp "\"gidNumber=0\\\\\\\+uidNumber=0,cn=peercred,cn=external,cn=auth"\"
+        dn="\"krb5PrincipalName=ldapmaster/admin@$DOMINIOKRB,ou=KerberosPrincipals,$LDAPDC"\"
+authz-regexp ^uid=([^,]+),cn=[^,]+,cn=auth$ uid=$"1",ou=KerberosPrincipals,$LDAPDC 
+
+# The userPassword by default can be changed
+# by the entry owning it if they are authenticated.
+# Others should not be able to see it, except the
+# admin entry below
+# These access lines apply to database #1 only
+access to attrs=userPassword,sambaNTPassword,sambaLMPassword,sambaPwdLastSet,sambaPwdMustChange,sambaPasswordHistory,krb5Key,krb5KeyVersionNumber
+        by dn="\"krb5PrincipalName=ldapmaster/admin@$DOMINIOKRB,ou=KerberosPrincipals,$LDAPDC"\" write
+        by anonymous auth
+        by self write
+        by * none
+
+# Ensure read access to the base for things like
+# supportedSASLMechanisms.  Without this you may
+# have problems with SASL not knowing what
+# mechanisms are available and the like.
+# Note that this is covered by the 'access to *'
+# ACL below too but if you change that as people
+# are wont to do you'll still need this if you
+# want SASL (and possible other things) to work
+# happily.
+access to dn.base="" by * read
+
+# The admin dn has full write access, everyone else
+# can read everything.
+access to *
+        by dn="\"krb5PrincipalName=ldapmaster/admin@$DOMINIOKRB,ou=KerberosPrincipals,$LDAPDC"\" write
+        by * read
+		
+#access to *
+#        by sockurl="^ldapi:///$" write 
+		
+" > $ETC_LDAP/slapd.access
+
+
+
+chown openldap.openldap /var/lib/ldap -R
+chown openldap.openldap /etc/ldap -R
+find /var/lib/ldap -type d -exec chmod 700 {} \;
+find /var/lib/ldap -type f -exec chmod 600 {} \;
+find /etc/ldap -type d -exec chmod 700 {} \; 
+find /etc/ldap -type f -exec chmod 600 {} \;
+touch /var/log/ldapchanges.log 
+chown openldap.openldap /var/log/ldapchanges.log /etc/sasldb2
+chmod 600 /var/log/ldapchanges.log /etc/sasldb2
+
+echo " 
+/var/log/ldapchanges.log {
+        rotate 5
+        weekly  
+        compress
+} 
+
+" > /etc/logrotate.d/ldapchanges
+
+
+
+echo "Copiando los schemas;"
+echo "Copiando los schemas;" >> $logf
+#cp $PWD_SRC_INSTALL/etc/ldap/schema/phpgwaccount.schema $ETC_LDAP/schema/
+#cp $PWD_SRC_INSTALL/etc/ldap/schema/phpgwcontact.schema $ETC_LDAP/schema/
+#cp $PWD_SRC_INSTALL/etc/ldap/schema/qmailuser.schema $ETC_LDAP/schema/
+cp $PWD_SRC_INSTALL/etc/ldap/schema/samba.schema $ETC_LDAP/schema/
+cp $PWD_SRC_INSTALL/etc/ldap/schema/hdb.schema $ETC_LDAP/schema/
+cp $PWD_SRC_INSTALL/etc/ldap/schema/services.schema $ETC_LDAP/schema/
+
+echo "Generando /etc/ldap/ldap.conf;"
+echo "Generando /etc/ldap/ldap.conf;" >> $logf
+echo "host $HOSTNAME.$DOMINIO
+base $LDAPDC
+uri ldapi:///
+#uri ldaps://$HOSTNAME.$DOMINIO
+#port 636
+#TLS_CACERT $ETC_LDAP/ssl/cacert.pem
+TIMELIMIT 2
+TLS_REQCERT never
+
+
+
+" >  $ETC_LDAP/ldap.conf
+
+echo "Generando /etc/libnss-ldap.conf"
+echo "base $LDAPDC
+#uri ldaps://$HOSTNAME.$DOMINIO/
+uri ldapi:///
+#rootbinddn krb5PrincipalName=ldapmaster/admin@$DOMINIOKRB,ou=KerberosPrincipals,$LDAPDC
+#port 636
+
+ldap_version 3
+bind_policy soft
+bind_timelimit 2
+timelimit 2
+scope sub
+nss_reconnect_maxsleeptime 8
+nss_reconnect_sleeptime 1
+nss_initgroups_ignoreusers root
+nss_srv_domain $DOMINIO
+
+pam_password exop
+
+pam_filter objectclass=posixAccount
+pam_login_attribute uid
+pam_member_attribute memberUid
+
+nss_base_passwd ou=Usuarios,$LDAPDC?sub
+nss_base_shadow ou=Usuarios,$LDAPDC?sub
+nss_base_passwd ou=Equipos,$LDAPDC?one
+nss_base_shadow ou=Equipos,$LDAPDC?one
+nss_base_group  ou=Grupos,$LDAPDC?one
+
+#Debian 7
+#ssl on
+
+#tls_ciphers TLSv1
+#tls_checkpeer yes
+#tls_cacertdir /etc/ldap/ssl
+" > $ETC/libnss-ldap.conf
+
+chmod 644 $ETC/libnss-ldap.conf
+
+echo "Generando /etc/libnss-ldap.secret"
+echo "Generando /etc/libnss-ldap.secret" >> $logf
+echo "$LDAPPASS
+" > $ETC/libnss-ldap.secret
+
+chmod 600 $ETC/libnss-ldap.secret
+
+echo "Generando /etc/nsswitch.conf" >> $logf
+echo "Generando /etc/nsswitch.conf"
+echo "passwd:    files ldap [notfound=continue]
+shadow:    files ldap [notfound=continue]
+group:     files ldap [notfound=continue]
+
+hosts:          files dns wins
+networks:       files
+
+protocols:      db files
+services:       db files
+ethers:         db files
+rpc:            db files
+
+netgroup:       nis
+" > $ETC/nsswitch.conf
+
+
+echo "Configurando /etc/default/slapd;"
+echo "Configurando /etc/default/slapd;" >> $logf
+#cat $ETC_DEFAULT/slapd|sed -e "s/SLAPD_USER/#SLAPD_USER/g" -e "s/SLAPD_GROUP/#SLAPD_GROUP/g" -e "s/SLAPD_SERVICES/#SLAPD_SERVICES/g" > #$ETC_DEFAULT/slapd-temp
+#echo "
+#SLAPD_USER="\"openldap"\"
+#SLAPD_GROUP="\"openldap"\"
+#SLAPD_SERVICES="\"ldap:/// ldaps:/// ldapi:///"\"
+#export KRB5_KTNAME=\"/etc/ldap/ldap.keytab\"
+#export LDAPTLS_CERT=\"/etc/ldap/ssl/servercrt.pem\"
+#export LDAPTLS_KEY=\"/etc/ldap/ssl/serverkey.pem\"
+
+#" >> $ETC_DEFAULT/slapd-temp
+#cat $ETC_DEFAULT/slapd-temp > $ETC_DEFAULT/slapd
+#rm -f $ETC_DEFAULT/slapd-temp
+
+echo "
+SLAPD_CONF=\"/etc/ldap/slapd.conf\"
+SLAPD_PIDFILE=
+SLAPD_SENTINEL_FILE=/etc/ldap/noslapd
+SLAPD_OPTIONS=\"\"
+SLAPD_USER=\"openldap\"
+SLAPD_GROUP=\"openldap\"
+SLAPD_SERVICES=\"ldap:/// ldaps:/// ldapi:///\"
+export KRB5_KTNAME=\"/etc/ldap/ldap.keytab\"
+export LDAPTLS_CERT=\"/etc/ldap/ssl/servercrt.pem\"
+export LDAPTLS_KEY=\"/etc/ldap/ssl/serverkey.pem\"
+
+" > $ETC_DEFAULT/slapd
+
+
+echo "Reiniciando el servico slapd;"
+echo "Reiniciando el servico slapd;" >> $logf
+/etc/init.d/slapd stop
+sleep 4
+rm -f /var/lib/ldap/*
+/etc/init.d/slapd start
+sleep 4
+
+echo "Generando o DB_CONFIG;"
+echo "Generando o DB_CONFIG;" >> $logf
+echo "
+
+set_cachesize           0 150000000 1
+set_lg_regionmax        262144
+set_lg_bsize            2097152
+set_lk_max_objects      1500
+set_lk_max_locks        1500
+set_lk_max_lockers      1500
+set_flags               DB_LOG_AUTOREMOVE
+
+" > /var/lib/ldap/DB_CONFIG
+
+echo "Generando una base estándar para LDAP;"
+echo "Generando una base estándar para LDAP;" >> $logf
+echo "dn: $LDAPDC
+dc: $DOMINIOLDIF
+objectClass: top
+objectClass: domain
+
+dn: ou=KerberosPrincipals,$LDAPDC
+ou: KerberosPrincipals
+objectClass: top
+objectClass: organizationalUnit
+
+dn: ou=Grupos,$LDAPDC
+ou: Grupos
+objectClass: top
+objectClass: organizationalUnit
+
+dn: ou=Equipos,$LDAPDC
+ou: Equipos
+objectClass: top
+objectClass: organizationalUnit
+
+dn: ou=Usuarios,$LDAPDC
+ou: Usuarios
+objectClass: top
+objectClass: organizationalUnit
+
+dn: ou=admins,ou=Usuarios,$LDAPDC
+objectclass: organizationalUnit
+objectclass: top
+ou: admins
+
+dn: krb5PrincipalName=ldapmaster/admin@$DOMINIOKRB,ou=KerberosPrincipals,$LDAPDC
+objectClass: top
+objectClass: person
+objectClass: krb5Principal
+objectClass: krb5KDCEntry
+krb5PrincipalName: ldapmaster/admin@$DOMINIOKRB
+krb5KeyVersionNumber: 1
+krb5MaxLife: 86400
+krb5MaxRenew: 604800
+krb5KDCFlags: 126
+cn: ldapmaster/admin@$DOMINIO
+sn: ldapmaster/admin@$DOMINIO
+userPassword: $LDAPPASS2
+" > $ETC_LDAP/base.ldif
+
+echo "Adicionando la base del LDAP;"
+echo "Adicionando la base del LDAP;" >> $logf
+echo "ldapadd -x -D krb5PrincipalName=ldapmaster/admin@$DOMINIOKRB,ou=KerberosPrincipals,$LDAPDC -w $LDAPPASS -f $ETC_LDAP/base.ldif"
+
+ldapadd -x -D krb5PrincipalName=ldapmaster/admin@$DOMINIOKRB,ou=KerberosPrincipals,$LDAPDC -w $LDAPPASS -f $ETC_LDAP/base.ldif -H ldapi:///
+
+##################################################
+#				             					 #
+# Inicio de la configuración de Heimdal Kerberos #
+#				             				 	 #
+##################################################
+
+echo '# Inicio de la configuración de Heimdal Kerberos #'  >> $logf
+
+echo "Modificando /etc/inetd.conf"
+echo "Modificando /etc/inetd.conf" >> $logf
+cat $ETC/inetd.conf|sed -e "s/^ident/#ident/g" -e "s/^krb_prop/#krb_prop/g" -e "s/^kshell/#kshell/g" -e "s/^ftp/#ftp/g" -e "s/^telnet/#telnet/g" -e "s/^pop-3/#pop-3/g" -e "s/^kx/#kx/g" > $ETC/inetd.conf-temp
+cat $ETC/inetd.conf-temp > $ETC/inetd.conf
+rm -f $ETC/inetd.conf-temp
+
+echo "Generando /etc/krb5.conf;"
+echo "Generando /etc/krb5.conf;" >> $logf
+echo "[libdefaults]
+        ticket_lifetime = 80000
+	renew_lifetime = 80000
+        default_realm = $DOMINIOKRB
+        default_keytab_name = FILE:/etc/krb5.keytab
+        default_etypes = des3-hmac-sha1 des-cbc-crc des-cbc-md5 des-cbc-md4 aes256-cts arcfour-hmac-md5
+	default_etypes_des = des3-hmac-sha1 des-cbc-crc des-cbc-md5 des-cbc-md4 aes256-cts arcfour-hmac-md5
+	default_tkt_enctypes= des3-hmac-sha1 des-cbc-crc des-cbc-md5 des-cbc-md4 aes256-cts arcfour-hmac-md5
+	default_tgs_enctypes= des3-hmac-sha1 des-cbc-crc des-cbc-md5 des-cbc-md4 aes256-cts arcfour-hmac-md5
+	kdc_timesync = 1
+        ccache_type = 4
+        forwardable = true
+        proxiable = true
+
+# The following libdefaults parameters are only for Heimdal Kerberos.
+        v4_instance_resolve = false
+        v4_name_convert = {
+                host = {
+                        rcmd = host
+                        ftp = ftp
+                }
+                plain = {
+                        something = something-else
+                }
+        }
+
+[realms]
+$DOMINIOKRB = {
+         kdc = $HOSTNAME.$DOMINIO
+         admin_server = $HOSTNAME.$DOMINIO
+         default_domain = $DOMINIO
+}
+
+[domain_realm]
+        .$DOMINIO = $DOMINIOKRB
+        $DOMINIO = $DOMINIOKRB
+
+[kdc]
+    enable-kerberos4 = false
+    kdc_warn_pwexpire = 7
+
+    database = {
+        realm = $DOMINIOKRB
+#        dbname = ldap:ou=Usuarios,$LDAPDC
+        dbname = ldap:$LDAPDC
+		hdb-ldap-structural-object = inetOrgPerson
+        mkey_file = /var/lib/heimdal-kdc/m-key
+        acl_file = /etc/kadmind.acl
+		log_file = /var/log/kdc-db.log
+
+    }
+    hdb-ldap-create-base = ou=KerberosPrincipals,$LDAPDC
+	
+
+[logging]
+        kdc = FILE:/var/log/heimdal/kdc.log
+        admin_server = FILE:/var/log/heimdal/admin.log
+        default = FILE:/var/log/heimdal/default.log
+
+[login]
+        krb4_convert = false
+        krb4_get_tickets = false
+
+[logging]
+    kdc = SYSLOG
+    admin_server = SYSLOG
+    default = SYSLOG
+
+[appdefaults]
+pam = {
+   ticket_lifetime = 1d
+   renew_lifetime = 1d
+   forwardable = true
+   proxiable = true
+   retain_after_close = false
+   minimum_uid = 0
+   debug = true
+}
+" > $ETC/krb5.conf
+
+
+echo "Generando /etc/heimdal-kdc/kdc.conf;"
+echo "Generando /etc/heimdal-kdc/kdc.conf;" >> $logf
+echo "
+[logging]
+kdc = FILE:/var/log/heimdal-kdc.log
+[kdc]
+    database = {
+		realm = $DOMINIOKRB
+		#dbname = ldap:ou=Usuarios,$LDAPDC
+		dbname = ldap:$LDAPDC
+		hdb-ldap-structural-object = inetOrgPerson
+		mkey_file = /var/lib/heimdal-kdc/m-key
+		acl_file = /etc/kadmind.acl
+		log_file = /var/log/kdc-db.log
+    }
+    hdb-ldap-create-base = ou=KerberosPrincipals,$LDAPDC
+[kadmin]
+[password-quality]
+" > /etc/heimdal-kdc/kdc.conf
+
+
+
+echo "Generando ACLs de Heimdal Kerberos;"
+echo "Generando ACLs de Heimdal Kerberos;" >> $logf
+echo "ldapmaster/admin@$DOMINIOKRB  add,delete,get  host/*@$DOMINIOKRB
+*       NO cpw  *@$DOMINIOKRB
+kadmin/admin@$DOMINIOKRB all
+root/admin@$DOMINIOKRB all
+addmachine/admin@$DOMINIOKRB all
+" > $ETC/kadmind.acl
+
+cat $ETC/kadmind.acl > /etc/heimdal-kdc/kadmind.acl
+
+echo "Generando diretorio de logs;"
+echo "Generando diretorio de logs;" >> $logf
+mkdir -p /var/log/heimdal
+
+echo "Eliminando el archivo /etc/krb5.keytab;"
+echo "Eliminando el archivo /etc/krb5.keytab;" >> $logf
+rm -rf /etc/krb5.keytab
+
+echo "Reiniciando Heimdal Kerberos;"
+echo "Reiniciando Heimdal Kerberos;" >> $logf
+
+set +e
+/etc/init.d/heimdal-kcm restart
+/etc/init.d/heimdal-kdc restart
+set -e
+
+echo "Generando la clave maestra de Heimdal Kerberos;"
+echo "Generando la clave maestra de Heimdal Kerberos;" >> $logf
+kstash --random-key
+
+
+#ps -eo user,args | grep slapd | grep -v grep | head -n 1
+
+#set +e
+echo "Generando el Kerberos realm;"
+echo "Generando el Kerberos realm;" >> $logf
+#kadmin -l del "*"
+
+kadmin -l init --realm-max-ticket-life=unlimited --realm-max-renewable-life=unlimited $DOMINIOKRB
+
+echo "Generando el principal de LDAP;"
+kadmin -l add --policy=default --random-key --max-ticket-life=unlimited --max-renewable-life=unlimited --expiration-time=never --pw-expiration-time=never --attributes= host/$HOSTNAME.$DOMINIO
+kadmin -l add --policy=default --random-key --max-ticket-life=unlimited --max-renewable-life=unlimited --expiration-time=never --pw-expiration-time=never --attributes= host/$HOSTNAME
+kadmin -l ext_keytab host/$HOSTNAME.$DOMINIO
+kadmin -l ext_keytab host/$HOSTNAME
+kadmin -l add --policy=default --random-key --max-ticket-life=unlimited --max-renewable-life=unlimited --expiration-time=never --pw-expiration-time=never --attributes= ldap/$HOSTNAME.$DOMINIO
+kadmin -l add --policy=default --random-key --max-ticket-life=unlimited --max-renewable-life=unlimited --expiration-time=never --pw-expiration-time=never --attributes= ldap/$HOSTNAME
+kadmin -l ext_keytab ldap/$HOSTNAME.$DOMINIO
+kadmin -l ext_keytab ldap/$HOSTNAME
+kadmin -l add --policy=default --random-key --max-ticket-life=unlimited --max-renewable-life=unlimited --expiration-time=never --pw-expiration-time=never --attributes= cifs/$HOSTNAME.$DOMINIO
+kadmin -l add --policy=default --random-key --max-ticket-life=unlimited --max-renewable-life=unlimited --expiration-time=never --pw-expiration-time=never --attributes= cifs/$HOSTNAME
+kadmin -l ext_keytab cifs/$HOSTNAME.$DOMINIO
+kadmin -l ext_keytab cifs/$HOSTNAME
+#set -e
+
+rm -f /etc/ldap/ldap.keytab
+
+kadmin -l ext_keytab -k /etc/ldap/ldap.keytab ldap/$HOSTNAME.$DOMINIO
+kadmin -l ext_keytab -k /etc/ldap/ldap.keytab ldap/$HOSTNAME
+
+chown openldap.openldap /etc/ldap/ldap.keytab
+chmod 400 /etc/ldap/ldap.keytab
+
+
+
+echo "Asignación de contraseña para los usuarios ldapmaster/admin y kadmin/admin;"
+echo "Asignación de contraseña para los usuarios ldapmaster/admin y kadmin/admin;" >> $logf
+kadmin -l cpw --password=$LDAPPASS ldapmaster/admin
+kadmin -l cpw --password=$KADMINPASS kadmin/admin
+
+##############################################
+#                                            #
+# Inicio de la configuración de SASL	     #
+#                                            #
+##############################################
+
+echo "Configurando SASL;"
+echo "Configurando SASL;" >> $logf
+#cat $ETC_DEFAULT/saslauthd |sed -e "s/^START/#START/g" -e "s/^MECHANISMS/#MECHANISMS/g" -e "s/^OPTIONS/#OPTIONS/g" > $ETC_DEFAULT/saslauthd-temp
+#echo "
+#START=yes
+#MECHANISMS="\"ldap"\" 
+#OPTIONS=\"-m /var/run/saslauthd\"
+#">> $ETC_DEFAULT/saslauthd-temp
+#cat $ETC_DEFAULT/saslauthd-temp > $ETC_DEFAULT/saslauthd
+#rm -f $ETC_DEFAULT/saslauthd-temp
+#echo "pwcheck_method: saslauthd
+##mech_list: GSSAPI
+#" > /usr/lib/sasl2/slapd.conf
+#rm -f $ETC_DEFAULT/saslauthd-temp
+
+echo "
+DESC=\"SASL Authentication Daemon\"
+NAME=\"saslauthd\"
+MECH_OPTIONS=\"\"
+THREADS=5
+START=yes
+MECHANISMS=\"ldap\" 
+OPTIONS=\"-m /var/run/saslauthd\"
+
+" > $ETC_DEFAULT/saslauthd
+
+echo "Generando archivo de configuración de saslauthd;"
+echo "Generando archivo de configuración de saslauthd;" >> $logf
+echo "ldap_servers: ldap://127.0.0.1
+ldap_port: 389
+ldap_version: 3
+ldap_referrals: no
+ldap_search_base: $LDAPDC
+" > /etc/saslauthd.conf
+
+echo "Reiniciando Heimdal Kerberos;"
+echo "Reiniciando Heimdal Kerberos;" >> $logf
+
+
+set +e
+/etc/init.d/heimdal-kcm restart
+/etc/init.d/heimdal-kdc restart
+set -e
+
+
+echo "Reiniciando Slapd;"
+echo "Reiniciando Slapd;" >> $logf
+/etc/init.d/slapd restart
+
+echo "Reiniciando SASL;"
+echo "Reiniciando SASL;" >> $logf
+/etc/init.d/saslauthd restart
+
+echo "Reiniciando INETD;"
+echo "Reiniciando INETD;" >> $logf
+/etc/init.d/openbsd-inetd restart
+
+##############################################
+#                                            #
+# Inicio de la configuración do Samba        #
+#                                            #
+##############################################
+
+echo Generando smb.conf;
+echo Generando smb.conf;  >> $logf
+echo "[global]
+
+	workgroup = $WORKGROUP
+	realm = $DOMINIOKRB
+	netbios name = $HOSTNAME
+	server string = Linux PDC/KDC
+
+	#Debian 6 >= samba 3.4  
+	#use kerberos keytab = yes
+	kerberos method = system keytab
+	dedicated keytab file = /etc/krb5.keytab		
+	#end Debian 6
+
+	;use spnego = yes
+	client NTLMv2 auth = yes
+	username map = /etc/samba/usermap
+											
+	debug level = 1
+
+	log file = /var/log/samba/%m.log
+	max log size = 5000
+	syslog = 0
+	log level = 1
+	utmp = Yes                
+													 
+	guest account = nobody
+	map to guest = Never
+	admin users = root  @\"Domain Admins\"
+	;enable privileges = yes 
+
+	security = user
+	encrypt passwords = yes
+	os level = 255
+	local master = yes
+	domain master = yes
+	preferred master = yes
+	domain logons = yes
+
+	keepalive = 20
+	time server = yes
+	preserve case = yes
+	short preserve case = yes
+	case sensitive = no
+	;null passwords = no
+
+	logon script = logon.bat
+	logon path = \\%L\%u\profile
+	logon drive = X:
+	logon home = \\%L\%u
+
+	bind interfaces only = yes
+	interfaces = $PLACADEREDE, lo
+	hosts allow = $REDESAMBA 127.
+	wins support = yes
+	dns proxy = yes
+
+	#passdb backend = ldapsam:ldaps://$HOSTNAME.$DOMINIO/
+	passdb backend = ldapsam:ldapi:///
+	ldapsam:trusted = yes
+	ldap admin dn = krb5PrincipalName=ldapmaster/admin@$DOMINIOKRB,ou=KerberosPrincipals,$LDAPDC
+	ldap suffix = $LDAPDC
+	ldap group suffix = ou=Grupos
+	ldap user suffix = ou=Usuarios
+	ldap machine suffix = ou=Equipos
+	ldap idmap suffix = ou=Idmap
+	#ldap ssl = On
+	ldap ssl = Off 
+	ldap delete dn = Yes
+	;idmap backend = ldaps:ldap://$HOSTNAME.$DOMINIO/
+	;idmap uid = 10000-15000
+	;idmap gid = 10000-15000
+
+	#
+	# Utilizando  smbldap-passwd para el cambio de password
+	#
+	pam password change = yes
+	unix password sync = yes
+	
+	#Para smbk5pwd usar on
+	#ldap passwd sync = yes
+	ldap passwd sync = Only
+	
+	passwd program = /usr/sbin/smbldap-passwd %u
+
+
+
+	socket options = TCP_NODELAY IPTOS_LOWDELAY SO_RCVBUF=8192 SO_SNDBUF=8192
+
+	add machine script = /usr/sbin/smbldap-useradd -w \"%u\"
+	add user script = /usr/sbin/smbldap-useradd -m -a \"%u\"
+	delete user script = /usr/sbin/smbldap-userdel \"%u\"
+	add group script = /usr/sbin/smbldap-groupadd -p \"%g\"
+	delete group script = /usr/sbin/smbldap-groupdel \"%g\"
+	add user to group script = /usr/sbin/smbldap-groupmod -m \"%u\" \"%g\"
+	delete user from group script = /usr/sbin/smbldap-groupmod -x \"%u\" \"%g\"
+	set primary group script = /usr/sbin/smbldap-usermod -g \"%g\" \"%u\"
+
+	dos charset = cp850
+	unix charset = iso8859-1
+	display charset = LOCALE
+	restrict anonymous = 0
+
+	load printers = no
+	printing = bsd
+	printcap name = /dev/null
+	disable spoolss = yes
+
+[netlogon]
+
+	comment = Network Logon Service
+	path = /etc/samba/netlogon
+	write list = \"@Domain Admins\"
+	create mask = 0700
+	directory mask = 0700
+	guest ok = Yes
+	browseable = No
+	fake oplocks = Yes
+	#share modes = No #debian 6 disable
+
+[homes]
+	comment = Carpeta Personal
+	path = /home/%u
+	read only = No
+	veto files = /autorun.inf/*.mp3/*.wma/*.dat/*.avi/*.mpeg
+	delete veto files = Yes
+	hide files = /profile/desktop.ini/
+	browseable = No
+	root preexec = /etc/samba/build_home \"%u\" \"%g\"
+
+[profile]
+	comment = Perfil de usuario
+	path = /home/%u
+	read only = No
+	profile acls = Yes
+	hide files = /desktop.ini/
+	browseable = No
+
+[admins]
+	comment = Solo Administradores
+	path = /home
+	valid users = \"@Domain Admins\"
+	force user = root
+	read only = No
+	browseable = No
+
+[raiz]
+	comment = Solo Administradores
+	path = /
+	valid users = \"@Domain Admins\"
+	force user = root
+	read only = No
+	browseable = No
+
+
+
+
+" > $ETC_SAMBA/smb.conf                            
+
+
+echo "
+addmachine = $DOMINIOKRB\addmachine/admin
+root = $DOMINIOKRB\root/admin
+
+" > $ETC_SAMBA/usermap
+
+echo "
+create  cifs.spnego     *       *               /usr/sbin/cifs.upcall %k %d
+
+" >> $ETC/request-key.conf
+
+mkdir -p $ETC_SAMBA/netlogon
+
+echo "net time \\pdc /set /yes
+
+" > $ETC_SAMBA/netlogon/logon.bat
+
+echo "#!/bin/bash
+
+if [ ! -d /home/\$1 ]; then
+ mkdir /home/\$1
+ cp -R /etc/samba/netlogon/Default/ /home/\$1/profile     
+ chown -R \$1:\"\$2\" /home/\$1
+ chmod 755 /home/\$1 -R
+ setquota -u \$1 25600 25600 0 0 -a
+fi
+
+" > $ETC_SAMBA/build_home
+
+chmod +x $ETC_SAMBA/build_home
+
+
+
+echo "Elimina algunos archivos innecesarios;"
+echo "Elimina algunos archivos innecesarios;" >> $logf
+rm -rf /etc/samba/*tdb
+rm -rf /var/lib/samba/*tdb
+rm -rf /var/lib/samba/*dat
+rm -rf /var/log/samba/*
+
+echo "Reiniciando samba;"
+/etc/init.d/samba restart
+
+echo "Almacena la Password de ldapmaster/admin en samba;"
+echo "Almacena la Password de ldapmaster/admin en samba;" >> $logf
+smbpasswd -w $LDAPPASS
+
+echo "Reiniciando samba;"
+echo "Reiniciando samba;" >> $logf
+/etc/init.d/samba restart
+
+echo "Generando SID del PDC; "
+echo "Generando SID del PDC; " >> $logf
+net getlocalsid $WORKGROUP
+
+echo "Reiniciando samba;"
+/etc/init.d/samba restart
+
+echo "Parametros";
+echo "Parametros"; >> $logf
+SIDPDC=`net getlocalsid $WORKGROUP|cut -d : -f2|sed -e "s/ //g"`
+
+echo "Ajuste de permisoes;"
+echo "Ajuste de permisoes;" >> $logf
+chmod 755 $ETC_SMBTOOLS
+chmod 750 /usr/sbin/smbldap-*
+
+echo "Configurando smbldap-tools;"
+echo "Configurando smbldap-tools;" >> $logf
+echo "SID="\"$SIDPDC"\"
+sambaDomain="\"$WORKGROUP"\"
+realm="\"$DOMINIOKRB"\"
+slaveLDAP="\"ldap://$HOSTNAME.$DOMINIO"\"
+slavePort="\"389"\"
+masterLDAP="\"ldap://$HOSTNAME.$DOMINIO"\"
+masterPort="\"389"\"
+ldapTLS="\"1"\"
+verify="\"require"\"
+cafile="\"/etc/ldap/ssl/cacert.pem"\"
+clientcert="\"/etc/ldap/ssl/servercrt.pem"\"
+clientkey="\"/etc/ldap/ssl/serverkey.pem"\"
+suffix="\"$LDAPDC"\"
+usersdn="\"ou=Usuarios,'$'{suffix}"\"
+computersdn="\"ou=Equipos,'$'{suffix}"\"
+groupsdn="\"ou=Grupos,'$'{suffix}"\"
+idmapdn="\"ou=Idmap,'$'{suffix}"\"
+sambaUnixIdPooldn="\"sambaDomainName=$WORKGROUP,'$'{suffix}"\"
+scope="\"sub"\"
+hash_encrypt="\"MD5"\"
+crypt_salt_format="\"%s"\"
+userLoginShell="\"/bin/false"\"
+userHome="\"/home/%U"\"
+userHomeDirectoryMode="\"700"\"
+userGecos="\"LDAP-Kerberos User"\"
+defaultUserGid="\"513"\"
+defaultComputerGid="\"515"\"
+skeletonDir="\"/etc/skel"\"
+defaultMaxPasswordAge="\"21"\"
+userSmbHome="\"\\\\$HOSTNAME'\'%U"\"
+userProfile="\"\\\\$HOSTNAME'\'profile'\'profile"\"
+userHomeDrive="\"X:"\"
+userScript="\"logon.bat"\"
+mailDomain="\"$DOMINIO"\"
+with_smbpasswd="\"0"\"
+smbpasswd="\"/usr/bin/smbpasswd"\"
+with_slappasswd="\"0"\"
+slappasswd="\"/usr/sbin/slappasswd"\"
+# no_banner="\"1"\"
+" > $ETC_SMBTOOLS/smbldap.conf
+chmod 640 $ETC_SMBTOOLS/smbldap.conf
+
+echo "Generando smbldap_bind.conf;"
+echo "Generando smbldap_bind.conf;" >> $logf
+echo "slaveDN="\"krb5PrincipalName=ldapmaster/admin@$DOMINIOKRB,ou=KerberosPrincipals,$LDAPDC"\"
+slavePw="\"$LDAPPASS"\"
+masterDN="\"krb5PrincipalName=ldapmaster/admin@$DOMINIOKRB,ou=KerberosPrincipals,$LDAPDC"\"
+masterPw="\"$LDAPPASS"\"
+" > $ETC_SMBTOOLS/smbldap_bind.conf
+chmod 600 $ETC_SMBTOOLS/smbldap_bind.conf
+
+echo "Modificaciones de smbldap-tools para soportar Heidal Kerberos;"
+echo "Modificaciones de smbldap-tools para soportar Heidal Kerberos;" >> $logf
+cp -f $PWD_SRC_INSTALL/bin/smbldap-useradd /usr/sbin/smbldap-useradd
+cp -f $PWD_SRC_INSTALL/bin/smbldap-passwd /usr/sbin/smbldap-passwd
+
+echo "Populate Smbldap-tools"
+echo "Populate Smbldap-tools" >> $logf
+smbldap-populate -a root -k 0 -m 0 << EOF
+$ROOTPASS
+$ROOTPASS
+EOF
+sleep 4
+
+echo "Adiciona los atributos de Kerberos al usuario root;" >> $logf
+echo "Adiciona los atributos de Kerberos al usuario root;"
+echo "dn: uid=root,ou=Usuarios,$LDAPDC
+changetype: modify
+add: objectClass
+objectClass: krb5Principal
+objectClass: krb5KDCEntry
+-
+add: krb5KeyVersionNumber
+krb5KeyVersionNumber: 1
+-
+add: krb5PrincipalName
+krb5PrincipalName: root/admin@$DOMINIOKRB
+-
+add: krb5KDCFlags
+krb5KDCFlags: 126
+-
+add: krb5MaxRenew
+krb5MaxRenew: 604800
+-
+add: krb5MaxLife
+krb5MaxLife: 86400
+-
+
+homeDirectory: /root
+" > $ETC_LDAP/rootmodify.ldif
+
+ldapmodify -x -D "krb5PrincipalName=ldapmaster/admin@$DOMINIOKRB,ou=KerberosPrincipals,$LDAPDC" -w $LDAPPASS -f $ETC_LDAP/rootmodify.ldif  -H ldapi:///
+
+echo "Cambiar el número predeterminado de Identificación inicial de Samba;"
+echo "Cambiar el número predeterminado de Identificación inicial de Samba;" >> $logf
+
+echo "dn: sambaDomainName=$WORKGROUP,$LDAPDC
+replace: uidNumber
+uidNumber: 2000
+-
+replace: gidNumber
+gidNumber: 2000
+" > $ETC_LDAP/nextsambaid.ldif
+
+ldapmodify -x -D "krb5PrincipalName=ldapmaster/admin@$DOMINIOKRB,ou=KerberosPrincipals,$LDAPDC" -w $LDAPPASS -f $ETC_LDAP/nextsambaid.ldif  -H ldapi:///
+
+echo "Adiciona el usuario addmachine;"
+echo "Adiciona el usuario addmachine;" >> $logf
+echo "CREANDO EL USUARIO addmachine PARA ADICIONAR MAQUINAS AL PDC"
+smbldap-useradd -a -m addmachine 
+
+echo "Cambiando pass del usuario addmachine;"
+echo "Cambiando pass del usuario addmachine;" >> $logf
+smbldap-passwd addmachine << EOF
+$ADDMACHINEPASS
+$ADDMACHINEPASS
+EOF
+
+echo "Modifica el krbPrincipalName de addmachine;"
+echo "Modifica el krbPrincipalName de addmachine;" >> $logf
+
+echo "dn: uid=addmachine,ou=Usuarios,$LDAPDC
+replace: krb5PrincipalName
+krb5PrincipalName: addmachine/admin@$DOMINIOKRB
+" > $ETC_LDAP/addmachinemodify.ldif
+
+ldapmodify -x -D "krb5PrincipalName=ldapmaster/admin@$DOMINIOKRB,ou=KerberosPrincipals,$LDAPDC" -w $LDAPPASS -f $ETC_LDAP/addmachinemodify.ldif -H ldapi:///
+
+
+echo "Adicionando el usuario administrator"
+echo "Adicionando el usuario administrator" >> $logf
+echo "dn: uid=administrator,ou=admins,ou=Usuarios,$LDAPDC
+cn: Administrator
+displayname: Administrator
+gecos: Domain Administrator
+gidnumber: 512
+givenname: Administrator
+homedirectory: /home/administrator
+krb5kdcflags: 126
+krb5keyversionnumber: 0
+krb5maxlife: 86400
+krb5maxrenew: 604800
+krb5principalname: administrator@$DOMINIOKRB
+loginshell: /bin/false
+objectclass: top
+objectclass: person
+objectclass: organizationalPerson
+objectclass: inetOrgPerson
+objectclass: posixAccount
+objectclass: shadowAccount
+objectclass: sambaSamAccount
+objectclass: krb5Principal
+objectclass: krb5KDCEntry
+sambaacctflags: [UX]
+sambahomedrive: X:
+sambahomepath: \\\\$HOSTNAME\\administrator
+sambakickofftime: 2147483647
+sambalmpassword: 7584248B8D2C9F9EAAD3B435B51404EE
+sambalogofftime: 2147483647
+sambalogonscript: logon.bat
+sambalogontime: 0
+sambantpassword: 186CB09181E2C2ECAAC768C47C729904
+sambaprimarygroupsid: $SIDPDC-512
+sambaprofilepath: \\\\$HOSTNAME\\profile\\profile
+sambapwdcanchange: 0
+sambapwdlastset: 1368298872
+sambapwdmustchange: 1370113272
+sambasid: $SIDPDC-5002
+shadowlastchange: 15836
+shadowmax: 21
+sn: Administrator
+uid: administrator
+uidnumber: 5002
+userpassword: $ADMINISTRATORPASS2
+
+" > $ETC_LDAP/administrator.ldif
+
+ldapadd -x -D krb5PrincipalName=ldapmaster/admin@$DOMINIOKRB,ou=KerberosPrincipals,$LDAPDC -w $LDAPPASS -f $ETC_LDAP/administrator.ldif -H ldapi://
+
+echo "Cambiando pass del usuario administrator;"
+echo "Cambiando pass del usuario administrator;"  >> $logf
+smbldap-passwd administrator << EOF
+$ADMINISTRATORPASS
+$ADMINISTRATORPASS
+EOF
+
+echo "Reiniciando Samba;"
+echo "Reiniciando Samba;" >> $logf
+/etc/init.d/samba restart
+
+# Ajusta o pam para o Samba alterar a Password des clientes Linux;
+# Eu nao sei exatamente se essa linha do PAM eh necessario, para as 
+# estacoes linux porem trocar as senhas dos usuarios.
+#echo "password   required     pam_smbpass.so use_authtok use_first_pass
+#" >> /etc/pam.d/samba
+
+echo "Habilitando smbk5pwd"
+echo "Habilitando smbk5pwd" >> $logf
+sed -i 's/#moduleload\      smbk5pwd/moduleload      smbk5pwd/g' /etc/ldap/slapd.conf
+sed -i 's/#overlay\ smbk5pwd/overlay smbk5pwd/g' /etc/ldap/slapd.conf
+
+#Para smbk5pwd
+if [ -d /var/lib/heimdal-kdc ]; then
+	chmod g+rx /var/lib/heimdal-kdc/ -R
+	chgrp openldap /var/lib/heimdal-kdc/ -R
+fi
+
+/etc/init.d/nscd stop
+/etc/init.d/nscd start
+
+echo "##############################################"
+echo "#                                            #"
+echo "#             Probando Config                #"
+echo "#                                            #"
+echo "##############################################"
+
+echo "nslookup $HOSTNAME"
+nslookup $HOSTNAME
+echo "nslookup $DOMINIO"
+nslookup $DOMINIO
+echo "nslookup $HOSTNAME.$DOMINIO"
+nslookup $HOSTNAME.$DOMINIO
+
+echo "kinit addmachine/admin"
+kinit --password-file=/tmp/kinit-passtest addmachine/admin
+echo "smbclient //$HOSTNAME/netlogon -k -c "quit""
+smbclient //$HOSTNAME/netlogon -k -c "quit"
+echo "ldapwhoami -Y GSSAPI"
+ldapwhoami -Y GSSAPI
+echo "klist"
+klist
+
+echo "getent passwd  addmachine"
+getent passwd  addmachine
+
+
+rm -f /tmp/kinit-passtest
+
+echo "##############################################"
+echo "#                                            #"
+echo "#       Samba+Kerberos+Ldap Ok               #"
+echo "#                                            #"
+echo "##############################################"
+
+##############################################
+#                                            #
+# Script para eliminar krb5EncryptionType    #
+#                                            #
+##############################################
+#KRB_TPL_DOMAIN=$DOMINIOKRB
+#sed -e "s/HOSTNAME/$HOSTNAME/g" -e "s/DOMINIO/$DOMINIO/g" -e "s/KRB_TPL_DOMAIN/$KRB_TPL_DOMAIN/g" -e "s/LDAPDC/$LDAPDC/g" $PWD_SRC_INSTALL/tpl/krb5EncryptionType-delete-ldapuser.sh.tpl > /usr/sbin/krb5EncryptionType-delete-ldapuser.sh
+#chmod 700 /usr/sbin/krb5EncryptionType-delete-ldapuser.sh
+
+#echo "Adicionando script en el crontab, cada 30 minutos se executa el script;"
+
+#echo "
+#*/30 * * * * /usr/sbin/krb5EncryptionType-delete-ldapuser.sh
+#" >> /var/spool/cron/crontabs/root
+#chmod 600 /var/spool/cron/crontabs/root
+#/etc/init.d/cron restart
+  
+
+##############################################
+#                                            #
+# Script para instalar Squid Kerberizado   #
+#                                            #
+##############################################
+#if [ -x $PWD_SRC_INSTALL/Squid-auth-kerberos/Squid-install ] ; then
+#  dialog --yesno 'Desea instalar  Squid Kerberizado?' 5 40 ; echo $?
+#    if [ $? = 0 ]; then
+#         chmod +x $PWD_SRC_INSTALL/Squid-auth-kerberos/Squid-install
+#         cd $PWD_SRC_INSTALL/Squid-auth-kerberos/
+#         $PWD_SRC_INSTALL/Squid-auth-kerberos/Squid-install
+#    fi
+#fi
+
+
