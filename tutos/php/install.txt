@@ -1,0 +1,45 @@
+apt-get install -y php7.4-{bcmath,bz2,intl,gd,mbstring,mysql,zip}
+libapache2-mod-php php php-apcu php-apcu-bc php-bz2 php-cli php-common php-curl php-gd php-google-recaptcha php-mbstring php-mysql php-phpmyadmin-motranslator php-phpmyadmin-shapefile php-phpmyadmin-sql-parser php-phpseclib php-psr-cache php-psr-container php-psr-log php-symfony-cache php-symfony-cache-contracts php-symfony-expression-language php-symfony-service-contracts php-symfony-var-exporter php-tcpdf php-twig php-twig-extensions php-xml php-zip php-bcmath php-bz2 php-cli php-common php-curl php-gd php-gmp php-imap php-intl php-json php-mbstring php-mysql php-opcache php-readline php-sqlite3 php-xml php-zip
+
+apt-get install -y php8.1-{bcmath,bz2,intl,gd,mbstring,mysql,zip}
+apt-get install -y php8.1-{cli,common,apcu,bz2,cli,common,curl,gd,mbstring,mysql,xml,zip,bcmath,bz2,curl,gd,gmp,imap,intl,json,mbstring,mysql,readline,sqlite3,xml,zip}
+
+php8.0 php8.0-{amqp,ast,cgi,cli,common,db,decimal,dev,ds,enchant,fpm,gearman,gmagick,gnupg,grpc,http,igbinary,inotify,ldap,lz4,maxminddb,mcrypt,memcache,memcached,mongodb,msgpack,oauth,opcache,pcov,pgsql,protobuf,pspell,psr,raphf,readline,redis,rrd,snmp,soap,ssh2,tidy,uopz,uploadprogress,uuid,vips,xmlrpc,yaml,zmq,zstd}
+
+aptitude search php | grep php8.1 | awk '{ print $2 }' | grep -v A 
+
+aptitude search php | grep php7.4 | awk '{ print $2 }' | grep -v A | xargs aptitude purge -y
+aptitude install php8.1-{amqp,ast,bcmath,bz2,calendar,cgi,ctype,dba,decimal,dev,dom,ds,enchant,exif,ffi,fileinfo,fpm,ftp,gd,gearman,gettext,gmagick,gnupg,grpc,http,iconv,igbinary,imagick,inotify,interbase,intl,json,ldap,lz4,mailparse,maxminddb,mbstring,mcrypt,memcache,memcached,mongodb,msgpack,mysql,mysqli,mysqlnd,oauth,odbc,opcache,pcov,pdo,pdo-dblib,pdo-firebird,pdo-mysql,pdo-odbc,pdo-pgsql,pdo-sqlite,pgsql,phar,phpdbg,posix,protobuf,ps,pspell,psr,raphf,redis,rrd,shmop,simplexml,snmp,soap,sockets,solr,sqlite3,ssh2,swoole,sybase,sysvmsg,sysvsem,sysvshm,tidy,tokenizer,uopz,uploadprogress,uuid,vips,xdebug,xhprof,xmlreader,xmlrpc,xmlwriter,xsl,yac,yaml,zip,zmq,zstd}
+
+a2enmod rewrite
+a2enmod proxy
+a2enmod proxy_http
+service apache2 restart
+
+        ServerAdmin webmaster@localhost                                                                                               
+        DocumentRoot /var/www/site/web                                                                                                
+                                                                                                                                      
+        DirectoryIndex app.php                                                                                                        
+        <Directory "/var/www/site/web">                                                                                               
+            AllowOverride None                                                                                                        
+            Allow from All                                                                                                            
+            <IfModule mod_rewrite.c>                                                                                                  
+                Options -MultiViews                                                                                                   
+                RewriteEngine On                                                                                                      
+                RewriteCond %{REQUEST_FILENAME} !-f                                                                                   
+                RewriteRule ^(.*)$ app.php [QSA,L]                                                                                    
+            </IfModule>                                                                                                               
+        </Directory>
+
+		<Location /shell>                                                                                                                     
+			ProxyPass http://localhost:4200/                                                                                                  
+		</Location>  
+
+#cd /opt
+#git clone https://github.com/certbot/certbot
+#cd certbot
+#./certbot-auto --help
+#./certbot-auto certonly -d 45.33.198.132 --email rnapoles86@gmail.com --rsa-key-size 4096
+
+certbot certonly --webroot -w /var/www/site -d 45.33.198.132 
+

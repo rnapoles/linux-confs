@@ -1,0 +1,8 @@
+certbot --apache -d app1.sample-app.com --email sample-app@gmail.com --rsa-key-size 4096
+certbot --apache -d app2.sample-app.com --email sample-app@gmail.com --rsa-key-size 4096
+certbot --apache -d app3.sample-app.com --email sample-app@gmail.com --rsa-key-size 4096
+certbot --apache -d app4.sample-app.com --email sample-app@gmail.com --rsa-key-size 4096
+certbot --apache -d app5.sample-app.com --email sample-app@gmail.com --rsa-key-size 4096
+certbot --apache -d app5-test.sample-app.com --email sample-app@gmail.com --rsa-key-size 4096
+mkdir -p /var/www/{app1,app2,app3,app4,app5,app5-test}
+a2enmod socache_dbm
