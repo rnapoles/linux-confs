@@ -1,0 +1,55 @@
+name: Deploy Angular to Production
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20.10.0
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Angular app
+        run: npm run deploy
+
+      - name: Deploy to Server
+        uses: easingthemes/ssh-deploy@main
+        with:
+            SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+            ARGS: "-rlgoDzvc -i --delete"
+            SOURCE: "dist/admin_unica"
+            REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+            REMOTE_USER: root
+            TARGET: /opt/sync/frontend/
+            #EXCLUDE: "/dist/, /node_modules/"
+      - name: Sync Backend and frontend
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.REMOTE_HOST }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            WWW_FOLDER=/var/www
+            SERVER_FOLDER=$WWW_FOLDER/backend
+            APP_FOLDER=$SERVER_FOLDER/public/app
+            NG_FOLDER=/opt/sync/frontend/admin_unica/browser
+            mkdir -p $APP_FOLDER
+            rm $APP_FOLDER/*.*
+            cp $NG_FOLDER/*.* $APP_FOLDER/
+            rm $APP_FOLDER/*.html
+            cp $NG_FOLDER/index.html $SERVER_FOLDER/resources/views/index.blade.php
+            cd $SERVER_FOLDER
+            php artisan cache:clear
+            php artisan view:clear
+            chown -R www-data.www-data $WWW_FOLDER
