@@ -1,1 +1,0 @@
-rabbitmqctl change_password guest 3l4l1m0/*--
