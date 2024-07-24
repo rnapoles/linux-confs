@@ -14,11 +14,10 @@ server_name example.com www.example.com;
 ...
 ```
 
-### Check conf
+### Load conf
 ```sh
-ln -s /etc/nginx/sites-available/dev.unica-backoffice /etc/nginx/sites-enabled/dev.unica-backoffice
+ln -s /etc/nginx/sites-available/example.com /etc/nginx/sites-enabled/example.com
 ```
-
 
 ### Check conf
 ```sh
