@@ -16,6 +16,12 @@ server_name example.com www.example.com;
 
 ### Check conf
 ```sh
+ln -s /etc/nginx/sites-available/dev.unica-backoffice /etc/nginx/sites-enabled/dev.unica-backoffice
+```
+
+
+### Check conf
+```sh
 nginx -t
 ```
 
