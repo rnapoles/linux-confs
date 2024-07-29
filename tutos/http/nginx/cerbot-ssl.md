@@ -24,7 +24,7 @@ ln -s /etc/nginx/sites-available/example.com /etc/nginx/sites-enabled/example.co
 nginx -t
 ```
 
-### Restart nginx
+### Reload nginx conf
 ```sh
 systemctl reload nginx
 ```
