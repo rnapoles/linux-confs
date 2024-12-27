@@ -34,14 +34,18 @@ systemctl reload nginx
 certbot --nginx -d example.com -d www.example.com
 ```
 
-### Get certs for example.com and www.example.com
+### Check certbot services
 ```sh
 systemctl status certbot.timer
+systemctl list-timers
+systemctl list-units | grep certbot
 ```
 
 ### Verifying Certbot Auto-Renewal
 ```sh
+grep -c skipped /var/log/letsencrypt/letsencrypt.log
 systemctl status certbot.timer
+journalctl -u certbot-renewal.timer
 ```
 
 ### To test the renewal process, you can do a dry run with certbot:

@@ -29,6 +29,15 @@ PermitRootLogin prohibit-password
 StrictModes yes
 ```
 
+### Check conf
+
+```sh
+sshd -t
+sshd -T
+```
+
+### Restart
+
 Restart ssh:
 
 ```sh
