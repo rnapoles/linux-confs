@@ -31,7 +31,7 @@ systemctl reload nginx
 
 ### Get certs for example.com and www.example.com
 ```sh
-certbot --nginx -d example.com -d www.example.com
+certbot --nginx -d example.com -d www.example.com --agree-tos
 ```
 
 ### Check certbot services

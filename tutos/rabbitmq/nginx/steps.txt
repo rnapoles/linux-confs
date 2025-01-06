@@ -1,0 +1,8 @@
+sudo ln -s /etc/nginx/sites-available/rabbitmq.conf /etc/nginx/sites-enabled/
+nginx -t
+systemctl restart nginx
+certbot --nginx -d rabbitmq.example.com -m admin@example.com --agree-tos
+systemctl restart nginx
+systemctl restart rabbitmq-server
+open https://rabbitmq.example.com
+
