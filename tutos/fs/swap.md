@@ -45,3 +45,28 @@ swapon --show
 free -h
 ```
 
+### Disable
+
+```sh
+swapoff -v /swapfile
+```
+
+### Swappiness
+
+The swappiness parameter dictates how aggressively your system utilizes swap space.
+A lower value causes the kernel to avoid swapping, while a higher value does the opposite.
+
+Temporarily set swappiness to 10, you might prefer 10 for high RAM systems.
+
+```sh
+sysctl vm.swappiness=10
+```
+
+Permanently change swappiness
+
+```sh
+echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf
+```
+### References
+
+- [How to add a swap file on Debian 12](https://osnote.com/how-to-add-a-swap-file-on-debian-12/ "How to add a swap file on Debian 12").
