@@ -35,6 +35,12 @@ rabbitmqctl add_user admin P@55w0rd
 rabbitmqctl set_user_tags admin administrator
 ```
 
+### Grant the user full permissions to all RabbitMQ resources on the server.
+
+```sh
+rabbitmqctl set_permissions -p / admin ".*" ".*" ".*"
+```
+
 ### Delete user
 ```sh
 rabbitmqctl delete_user guest
