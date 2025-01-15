@@ -1,0 +1,34 @@
+# /etc/ssh/sshd_config
+
+Include /etc/ssh/sshd_config.d/*.conf
+
+# Disable other authentication methods
+PasswordAuthentication no
+ChallengeResponseAuthentication no
+UsePAM no
+
+# Disallow root login for better security
+PermitRootLogin yes         
+
+# Enable public key authentication
+PubkeyAuthentication yes
+
+# Set stricter permissions (optional)
+StrictModes yes
+
+# Specify the authorized keys file
+AuthorizedKeysFile .ssh/authorized_keys
+
+# Allow only protocol 2
+Protocol 2
+
+# Adjust as needed
+AllowAgentForwarding no    
+AllowTcpForwarding no
+X11Forwarding no
+
+# Allow client to pass locale environment variables
+AcceptEnv LANG LC_*
+
+# override default of no subsystems
+Subsystem sftp  /usr/lib/openssh/sftp-server
