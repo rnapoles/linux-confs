@@ -1,0 +1,14 @@
+apt-get install libapache2-mod-gnutls
+a2dismod ssl
+a2enmod gnutls
+a2enmod socache_dbm
+
+<IfModule mod_gnutls.c>
+  GnuTLSEnable on
+  #GnuTLSPriorities NORMAL
+  GnuTLSPriorities NORMAL:!DHE-RSA:!DHE-DSS:!AES-256-CBC:%COMPAT
+  GnuTLSCertificateFile /etc/letsencrypt/live/www.example.com/fullchain.pem
+  GnuTLSKeyFile         /etc/letsencrypt/live/www.example.com/privkey.pem
+</IfModule>
+
+grep -r "mod_ssl" /etc/apache2/sites-enabled/
